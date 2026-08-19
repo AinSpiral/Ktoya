@@ -1,0 +1,35 @@
+name: Temporary TTS Shpargalka
+
+on:
+  push:
+    branches:
+      - 'tmp/tts-shpargalka-20260819'
+    paths:
+      - '.github/workflows/tmp-tts-shpargalka.yml'
+  workflow_dispatch:
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install edge-tts faster-whisper rapidfuzz
+          ffmpeg -version | head -1
+      - name: Generate and verify audio
+        run: python tmp_tts/run.py
+      - name: Upload MP3 and verification
+        uses: actions/upload-artifact@v4
+        with:
+          name: shpargalka-audio
+          path: |
+            tmp_tts/out/Шпаргалка_3_группа_281_вопрос_ответ_нейроголос.mp3
+            tmp_tts/out/verification.json
+          if-no-files-found: error
+          retention-days: 1
