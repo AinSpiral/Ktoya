@@ -8,6 +8,9 @@ on:
       - '.github/workflows/tmp-tts-shpargalka.yml'
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   generate:
     runs-on: ubuntu-latest
@@ -33,3 +36,12 @@ jobs:
             tmp_tts/out/verification.json
           if-no-files-found: error
           retention-days: 1
+      - name: Write completion marker
+        if: success()
+        run: |
+          printf '{"complete":true,"run_id":%s,"run_number":%s,"head_sha":"%s"}\n' "$GITHUB_RUN_ID" "$GITHUB_RUN_NUMBER" "$GITHUB_SHA" > tmp_tts/status.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tmp_tts/status.json
+          git commit -m "Temporary TTS generation complete"
+          git push
