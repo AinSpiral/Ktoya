@@ -1,4 +1,4 @@
-name: Temporary TTS Shpargalka
+name: Temporary TTS cheat sheet
 
 on:
   push:
@@ -6,42 +6,52 @@ on:
       - 'tmp/tts-shpargalka-20260819'
     paths:
       - '.github/workflows/tmp-tts-shpargalka.yml'
-  workflow_dispatch:
-
-permissions:
-  contents: write
+      - 'tts_tmp/**'
 
 jobs:
-  generate:
+  build-audio:
     runs-on: ubuntu-latest
     timeout-minutes: 180
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Checkout temporary branch
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Install dependencies
+
+      - name: Install audio tools
         run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
           python -m pip install --upgrade pip
-          pip install edge-tts faster-whisper rapidfuzz
-          ffmpeg -version | head -1
-      - name: Generate and verify audio
-        run: python tmp_tts/run.py
-      - name: Upload MP3 and verification
+          pip install 'piper-tts==1.6.0' faster-whisper
+
+      - name: Download Russian neural voices
+        run: |
+          mkdir -p voices
+          python -m piper.download_voices --download-dir voices ru_RU-dmitri-medium ru_RU-denis-medium ru_RU-irina-medium
+          ls -lh voices
+
+      - name: Learn best readable settings and generate all 281 Q&A
+        run: python tts_tmp/generate_audio.py
+
+      - name: Validate outputs
+        run: |
+          test -s 'tts_result/Шпаргалка_3_группа_281_вопрос_ответ.mp3'
+          test -s tts_result/verification_report.txt
+          ffmpeg -v error -i 'tts_result/Шпаргалка_3_группа_281_вопрос_ответ.mp3' -f null -
+          cat tts_result/verification_report.txt
+          ls -lh tts_result
+
+      - name: Upload verified audio
         uses: actions/upload-artifact@v4
         with:
           name: shpargalka-audio
           path: |
-            tmp_tts/out/Шпаргалка_3_группа_281_вопрос_ответ_нейроголос.mp3
-            tmp_tts/out/verification.json
+            tts_result/Шпаргалка_3_группа_281_вопрос_ответ.mp3
+            tts_result/verification_report.txt
+            tts_result/контрольный_фрагмент.wav
           if-no-files-found: error
           retention-days: 1
-      - name: Write completion marker
-        if: success()
-        run: |
-          printf '{"complete":true,"run_id":%s,"run_number":%s,"head_sha":"%s"}\n' "$GITHUB_RUN_ID" "$GITHUB_RUN_NUMBER" "$GITHUB_SHA" > tmp_tts/status.json
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add tmp_tts/status.json
-          git commit -m "Temporary TTS generation complete"
-          git push
