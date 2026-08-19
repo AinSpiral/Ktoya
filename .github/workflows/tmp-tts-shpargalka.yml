@@ -19,6 +19,15 @@ jobs:
       - name: Checkout temporary branch
         uses: actions/checkout@v4
 
+      - name: Write start status
+        run: |
+          printf '{"status":"started","run_id":%s,"run_number":%s,"sha":"%s"}\n' "$GITHUB_RUN_ID" "$GITHUB_RUN_NUMBER" "$GITHUB_SHA" > tts_status.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tts_status.json
+          git commit -m "temp: TTS run started" || true
+          git push || true
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
