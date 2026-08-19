@@ -8,6 +8,9 @@ on:
       - '.github/workflows/tmp-tts-shpargalka.yml'
       - 'tts_tmp/**'
 
+permissions:
+  contents: write
+
 jobs:
   build-audio:
     runs-on: ubuntu-latest
@@ -55,3 +58,15 @@ jobs:
             tts_result/контрольный_фрагмент.wav
           if-no-files-found: error
           retention-days: 1
+
+      - name: Write completion status
+        if: always()
+        env:
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          printf '{"status":"%s","run_id":%s,"run_number":%s,"sha":"%s"}\n' "$JOB_STATUS" "$GITHUB_RUN_ID" "$GITHUB_RUN_NUMBER" "$GITHUB_SHA" > tts_status.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tts_status.json
+          git commit -m "temp: TTS run status $JOB_STATUS" || true
+          git push || true
