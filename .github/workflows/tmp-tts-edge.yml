@@ -1,0 +1,64 @@
+name: Temporary Lean TTS
+
+on:
+  push:
+    branches:
+      - 'tmp/tts-shpargalka-20260819'
+    paths:
+      - '.github/workflows/tmp-tts-edge.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: Mark started
+        run: |
+          printf '{"status":"started","run_id":%s,"run_number":%s,"sha":"%s"}\n' "$GITHUB_RUN_ID" "$GITHUB_RUN_NUMBER" "$GITHUB_SHA" > edge_status.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add edge_status.json
+          git commit -m "temp: lean TTS started" || true
+          git push || true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install lean dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install edge-tts faster-whisper rapidfuzz
+          ffmpeg -version | head -1
+      - name: Generate and self-check
+        run: python tts_tmp/generate_edge_audio.py
+      - name: Validate MP3
+        run: |
+          test -s 'edge_result/Шпаргалка_3_группа_281_вопрос_ответ.mp3'
+          test -s edge_result/verification_report.txt
+          ffmpeg -v error -i 'edge_result/Шпаргалка_3_группа_281_вопрос_ответ.mp3' -f null -
+          cat edge_result/verification_report.txt | head -15
+      - name: Upload verified result
+        uses: actions/upload-artifact@v4
+        with:
+          name: shpargalka-edge-audio
+          path: |
+            edge_result/Шпаргалка_3_группа_281_вопрос_ответ.mp3
+            edge_result/verification_report.txt
+            edge_result/контрольный_фрагмент.mp3
+          if-no-files-found: error
+          retention-days: 1
+      - name: Mark final status
+        if: always()
+        env:
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          printf '{"status":"%s","run_id":%s,"run_number":%s,"sha":"%s"}\n' "$JOB_STATUS" "$GITHUB_RUN_ID" "$GITHUB_RUN_NUMBER" "$GITHUB_SHA" > edge_status.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add edge_status.json
+          git commit -m "temp: lean TTS $JOB_STATUS" || true
+          git push || true
