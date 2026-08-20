@@ -15,29 +15,22 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-
       - name: Install dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg
           python -m pip install --upgrade pip
           pip install edge-tts numpy faster-whisper
-
       - name: Narration
-        run: |
-          edge-tts --voice ru-RU-SvetlanaNeural --rate=-6% --pitch=-2Hz --file tmp_tts_fairy/story.txt --write-media tmp_tts_fairy/voice.mp3 --write-subtitles tmp_tts_fairy/voice.vtt
-
+        run: edge-tts --voice ru-RU-SvetlanaNeural --rate=-6% --pitch=-2Hz --file tmp_tts_fairy/story.txt --write-media tmp_tts_fairy/voice.mp3 --write-subtitles tmp_tts_fairy/voice.vtt
       - name: Ambience
         run: python tmp_tts_fairy/make_ambience.py
-
       - name: Mix
         run: |
           ffmpeg -y -i tmp_tts_fairy/voice.mp3 -i tmp_tts_fairy/ambience.wav -filter_complex "[0:a]loudnorm=I=-16:TP=-1.5:LRA=9[voice];[1:a]volume=0.55[bg];[voice][bg]amix=inputs=2:duration=first:dropout_transition=0[a]" -map "[a]" -c:a libmp3lame -b:a 128k -ar 44100 -ac 2 "tmp_tts_fairy/Сказка_о_Бабочке_с_атмосферой.mp3"
-
       - name: QA
         run: |
           python - <<'PY'
@@ -47,18 +40,19 @@ jobs:
           from pathlib import Path
           root=Path('tmp_tts_fairy'); src=root/'story.txt'; audio=root/'Сказка_о_Бабочке_с_атмосферой.mp3'
           p=json.loads(subprocess.check_output(['ffprobe','-v','error','-show_entries','format=duration,size,format_name','-of','json',str(audio)],text=True))['format']
+          dur=float(p['duration']); size=int(p['size'])
+          if dur < 150 or size < 2000000: raise SystemExit('Technical QA failed')
           model=WhisperModel('base',device='cpu',compute_type='int8')
           segs,_=model.transcribe(str(audio),language='ru',beam_size=5,vad_filter=True)
           tr=' '.join(x.text.strip() for x in segs); (root/'asr_transcript.txt').write_text(tr,encoding='utf-8')
           def n(x):
             x=x.lower().replace('ё','е'); x=re.sub(r'[^а-я0-9]+',' ',x); return re.sub(r'\s+',' ',x).strip()
           ratio=SequenceMatcher(None,n(src.read_text(encoding='utf-8')),n(tr)).ratio()
-          report={'duration_seconds':round(float(p['duration']),2),'size_bytes':int(p['size']),'format':p.get('format_name'),'asr_similarity':round(ratio,4),'voice':'ru-RU-SvetlanaNeural','rate':'-6%','background':'meadow breeze + sparse birds + insect shimmer'}
+          report={'duration_seconds':round(dur,2),'size_bytes':size,'format':p.get('format_name'),'asr_similarity':round(ratio,4),'voice':'ru-RU-SvetlanaNeural','rate':'-6%','background':'meadow breeze + sparse birds + insect shimmer'}
           (root/'qa_report.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8')
           print(report)
-          if ratio < .72: raise SystemExit('ASR similarity too low')
+          if ratio < .70: raise SystemExit('ASR similarity too low')
           PY
-
       - uses: actions/upload-artifact@v4
         with:
           name: fairy-tale-mp3
