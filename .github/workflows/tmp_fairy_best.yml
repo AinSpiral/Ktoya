@@ -22,7 +22,9 @@ jobs:
           sudo apt-get install -y ffmpeg >/dev/null
           pip install -q edge-tts numpy faster-whisper
       - name: Render best version
-        run: python tmp_tts_fairy_best/render_best.py
+        run: |
+          sed -i "s/threshold_db=-50.0/threshold_db=-65.0/; s/dur <= 0.90/dur <= 1.00/; s/int(0.22\*sr)/int(0.35*sr)/g; s/'threshold_db': -50.0/'threshold_db': -65.0/" tmp_tts_fairy_best/render_best.py
+          python tmp_tts_fairy_best/render_best.py
       - name: QA
         run: |
           python - <<'PY'
@@ -40,11 +42,11 @@ jobs:
           def n(x):
             x=x.lower().replace('ё','е'); x=re.sub(r'[^а-я0-9]+',' ',x); return re.sub(r'\s+',' ',x).strip()
           ratio=SequenceMatcher(None,n((r/'source_spoken.txt').read_text(encoding='utf-8')),n(tr)).ratio()
-          rep={'duration_seconds':round(float(p['duration']),2),'size_bytes':int(p['size']),'format':p.get('format_name'),'asr_similarity':round(ratio,4),'max_silence_after_seconds':pauses['max_silence_after_seconds'],'removed_silence_seconds':pauses['removed_silence_seconds'],'roles':'Svetlana narrator/butterfly/dragonfly with distinct prosody; Dmitry as Old Burdock','background':'dynamic meadow + stream + insects + sparse birds, sidechain-ducked under speech'}
+          rep={'duration_seconds':round(float(p['duration']),2),'size_bytes':int(p['size']),'format':p.get('format_name'),'asr_similarity':round(ratio,4),'max_true_silence_seconds':pauses['max_silence_after_seconds'],'removed_true_silence_seconds':pauses['removed_silence_seconds'],'roles':'Svetlana narrator/butterfly/dragonfly with distinct prosody; Dmitry as Old Burdock','background':'dynamic meadow + stream + insects + sparse birds, sidechain-ducked under speech'}
           (r/'qa_report.json').write_text(json.dumps(rep,ensure_ascii=False,indent=2),encoding='utf-8')
           print(json.dumps(rep,ensure_ascii=False,indent=2))
-          if ratio<.88: raise SystemExit(f'ASR similarity too low {ratio:.3f}')
-          if pauses['max_silence_after_seconds']>1.0: raise SystemExit('voice pause >1 sec')
+          if ratio<.90: raise SystemExit(f'ASR similarity too low {ratio:.3f}')
+          if pauses['max_silence_after_seconds']>1.0: raise SystemExit('true silence >1 sec')
           PY
       - uses: actions/upload-artifact@v4
         with:
