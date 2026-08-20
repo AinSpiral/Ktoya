@@ -3,11 +3,6 @@ name: Temporary Fairy Tale Best MP3
 on:
   pull_request:
     branches: [main]
-  push:
-    branches: [tmp-tts-fairy-20260821]
-    paths:
-      - 'tmp_tts_fairy_best/**'
-      - '.github/workflows/tmp_fairy_best.yml'
 
 permissions:
   contents: read
@@ -26,59 +21,46 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y ffmpeg >/dev/null
           pip install -q edge-tts numpy faster-whisper
-      - name: Render expressive multi-role narration
+      - name: Render
         run: |
           python - <<'PY'
-          import asyncio, json, subprocess, wave, re
+          import asyncio,json,subprocess,wave
           from pathlib import Path
-          import numpy as np
-          import edge_tts
-          root=Path('tmp_tts_fairy_best'); root.mkdir(exist_ok=True)
-          segs=json.loads((root/'story_segments.json').read_text(encoding='utf-8'))
-          cfg={
-            'narrator':('ru-RU-SvetlanaNeural','-3%','-2Hz'),
-            'butterfly':('ru-RU-SvetlanaNeural','+5%','+14Hz'),
-            'dragonfly':('ru-RU-SvetlanaNeural','-7%','-8Hz'),
-            'burdock':('ru-RU-DmitryNeural','-8%','-12Hz'),
-          }
+          import numpy as np, edge_tts
+          root=Path('tmp_tts_fairy_best'); segs=json.loads((root/'story_segments.json').read_text(encoding='utf-8'))
+          cfg={'narrator':('ru-RU-SvetlanaNeural','-3%','-2Hz'),'butterfly':('ru-RU-SvetlanaNeural','+5%','+14Hz'),'dragonfly':('ru-RU-SvetlanaNeural','-7%','-8Hz'),'burdock':('ru-RU-DmitryNeural','-8%','-12Hz')}
           async def main():
             for i,s in enumerate(segs):
-              voice,rate,pitch=cfg[s['role']]
-              await edge_tts.Communicate(s['text'],voice=voice,rate=rate,pitch=pitch).save(str(root/f'seg_{i:03d}.mp3'))
+              v,r,p=cfg[s['role']]
+              mp3=root/f'seg_{i:03d}.mp3'; wav=root/f'seg_{i:03d}.wav'
+              await edge_tts.Communicate(s['text'],voice=v,rate=r,pitch=p).save(str(mp3))
+              subprocess.run(['ffmpeg','-loglevel','error','-y','-i',str(mp3),'-ar','44100','-ac','1','-c:a','pcm_s16le',str(wav)],check=True)
           asyncio.run(main())
           parts=[]
           for i,s in enumerate(segs):
-            pause=0.28
-            if i==0: pause=0.55
-            elif s['role']=='narrator': pause=0.32
-            elif len(s['text'])<18: pause=0.22
-            else: pause=0.26
-            if s['text'].endswith('...'): pause=0.42
-            silence=root/f'sil_{i:03d}.wav'
-            subprocess.run(['ffmpeg','-loglevel','error','-y','-f','lavfi','-i','anullsrc=r=24000:cl=mono','-t',str(pause),str(silence)],check=True)
-            parts += [root/f'seg_{i:03d}.mp3', silence]
+            pause=0.55 if i==0 else (0.42 if s['text'].endswith('...') else (0.32 if s['role']=='narrator' else (0.22 if len(s['text'])<18 else 0.26)))
+            sil=root/f'sil_{i:03d}.wav'
+            subprocess.run(['ffmpeg','-loglevel','error','-y','-f','lavfi','-i','anullsrc=r=44100:cl=mono','-t',str(pause),str(sil)],check=True)
+            parts += [root/f'seg_{i:03d}.wav', sil]
           (root/'concat.txt').write_text('\n'.join(f"file '{p.name}'" for p in parts),encoding='utf-8')
-          subprocess.run(['ffmpeg','-loglevel','error','-y','-f','concat','-safe','0','-i','concat.txt','-ar','44100','-ac','1','-c:a','pcm_s16le','voice.wav'],check=True,cwd=root)
-          subprocess.run(['ffmpeg','-loglevel','error','-y','-f','lavfi','-i','anullsrc=r=44100:cl=mono','-t','0.65',str(root/'head.wav')],check=True)
-          subprocess.run(['ffmpeg','-loglevel','error','-y','-f','lavfi','-i','anullsrc=r=44100:cl=mono','-t','0.75',str(root/'tail.wav')],check=True)
+          subprocess.run(['ffmpeg','-loglevel','error','-y','-f','concat','-safe','0','-i','concat.txt','-c:a','pcm_s16le','voice.wav'],check=True,cwd=root)
+          for name,d in [('head.wav',0.65),('tail.wav',0.75)]:
+            subprocess.run(['ffmpeg','-loglevel','error','-y','-f','lavfi','-i','anullsrc=r=44100:cl=mono','-t',str(d),str(root/name)],check=True)
           (root/'voice_concat.txt').write_text("file 'head.wav'\nfile 'voice.wav'\nfile 'tail.wav'\n",encoding='utf-8')
           subprocess.run(['ffmpeg','-loglevel','error','-y','-f','concat','-safe','0','-i','voice_concat.txt','-c:a','pcm_s16le','voice_full.wav'],check=True,cwd=root)
-          dur=float(subprocess.check_output(['ffprobe','-v','error','-show_entries','format=duration','-of','default=nw=1:nk=1',str(root/'voice_full.wav')],text=True))
-          sr=44100; n=int(dur*sr); rng=np.random.default_rng(20260821); t=np.arange(n)/sr
-          noise=rng.normal(0,1,n); breeze=np.convolve(noise,np.ones(1500)/1500,mode='same')*0.18
-          water=rng.normal(0,1,n); water=np.convolve(water,np.ones(22)/22,mode='same')*0.055
-          insects=(np.sin(2*np.pi*6200*t+0.8*np.sin(2*np.pi*0.18*t))+0.45*np.sin(2*np.pi*7900*t))*0.0025
+          dur=float(subprocess.check_output(['ffprobe','-v','error','-show_entries','format=duration','-of','default=nw=1:nk=1',str(root/'voice_full.wav')],text=True)); sr=44100; n=int(dur*sr); rng=np.random.default_rng(21); t=np.arange(n)/sr
+          breeze=np.convolve(rng.normal(0,1,n),np.ones(1600)/1600,mode='same')*0.16
+          water=np.convolve(rng.normal(0,1,n),np.ones(24)/24,mode='same')*0.045
+          insects=(np.sin(2*np.pi*6200*t+0.7*np.sin(2*np.pi*0.17*t))+0.35*np.sin(2*np.pi*7800*t))*0.0022
           amb=breeze+water+insects
-          for sec in [4.2,17.8,35.3,57.2,81.5,108.4,137.6,164.1]:
-            if sec+0.5>=dur: continue
-            L=int(0.45*sr); x=np.arange(L)/sr; f0=1850+280*np.sin(2*np.pi*x/0.45); phase=2*np.pi*np.cumsum(f0)/sr
-            chirp=np.sin(phase)*np.hanning(L)*0.035; a=int(sec*sr); amb[a:a+L]+=chirp
-          start=max(0,dur-24); a=int(start*sr); L=min(int(7*sr),n-a); x=np.arange(L)/sr
-          amb[a:a+L]+=(np.sin(2*np.pi*880*x)+0.5*np.sin(2*np.pi*1320*x))*np.exp(-x/4)*0.006
-          amb=np.tanh(amb)*0.85
+          for sec in [4.5,18,36,58,83,110,139,166]:
+            if sec+.5>=dur: continue
+            L=int(.45*sr); x=np.arange(L)/sr; f=1900+300*np.sin(2*np.pi*x/.45); ph=2*np.pi*np.cumsum(f)/sr; a=int(sec*sr); amb[a:a+L]+=np.sin(ph)*np.hanning(L)*0.028
+          start=max(0,dur-22); a=int(start*sr); L=min(int(6*sr),n-a); x=np.arange(L)/sr; amb[a:a+L]+=(np.sin(2*np.pi*880*x)+.45*np.sin(2*np.pi*1320*x))*np.exp(-x/4)*0.004
           with wave.open(str(root/'ambience.wav'),'wb') as w:
-            w.setnchannels(1); w.setsampwidth(2); w.setframerate(sr); w.writeframes((np.clip(amb,-1,1)*32767).astype('<i2').tobytes())
-          subprocess.run(['ffmpeg','-loglevel','error','-y','-i',str(root/'voice_full.wav'),'-i',str(root/'ambience.wav'),'-filter_complex','[0:a]loudnorm=I=-16:TP=-1.5:LRA=8[vox];[1:a]highpass=f=90,lowpass=f=10500,volume=0.38[bg];[bg][vox]sidechaincompress=threshold=0.018:ratio=9:attack=18:release=420:makeup=1[duck];[vox][duck]amix=inputs=2:duration=first:weights=1 0.38:normalize=0,alimiter=limit=0.95[out]','-map','[out]','-ar','44100','-ac','2','-c:a','libmp3lame','-b:a','160k',str(root/'Сказка_о_Бабочке_ЖИВАЯ_версия.mp3')],check=True)
+            w.setnchannels(1);w.setsampwidth(2);w.setframerate(sr);w.writeframes((np.clip(np.tanh(amb),-1,1)*32767).astype('<i2').tobytes())
+          filt='[0:a]loudnorm=I=-16:TP=-1.5:LRA=8,asplit=2[v1][v2];[1:a]highpass=f=90,lowpass=f=10500,volume=0.32[bg];[bg][v1]sidechaincompress=threshold=0.018:ratio=9:attack=18:release=420[duck];[v2][duck]amix=inputs=2:duration=first:weights=1 0.30:normalize=0,alimiter=limit=0.95[out]'
+          subprocess.run(['ffmpeg','-loglevel','error','-y','-i',str(root/'voice_full.wav'),'-i',str(root/'ambience.wav'),'-filter_complex',filt,'-map','[out]','-ar','44100','-ac','2','-c:a','libmp3lame','-b:a','160k',str(root/'Сказка_о_Бабочке_ЖИВАЯ_версия.mp3')],check=True)
           (root/'source_spoken.txt').write_text(' '.join(s['text'] for s in segs),encoding='utf-8')
           PY
       - name: QA
@@ -88,20 +70,15 @@ jobs:
           from pathlib import Path
           from difflib import SequenceMatcher
           from faster_whisper import WhisperModel
-          root=Path('tmp_tts_fairy_best'); audio=root/'Сказка_о_Бабочке_ЖИВАЯ_версия.mp3'
-          p=json.loads(subprocess.check_output(['ffprobe','-v','error','-show_entries','format=duration,size,format_name','-of','json',str(audio)],text=True))['format']
-          model=WhisperModel('small',device='cpu',compute_type='int8')
-          segs,_=model.transcribe(str(audio),language='ru',beam_size=5,vad_filter=True)
-          tr=' '.join(x.text.strip() for x in segs); (root/'asr_transcript.txt').write_text(tr,encoding='utf-8')
-          def norm(x):
-            x=x.lower().replace('ё','е'); x=re.sub(r'[^а-я0-9]+',' ',x); return re.sub(r'\s+',' ',x).strip()
-          src=(root/'source_spoken.txt').read_text(encoding='utf-8'); ratio=SequenceMatcher(None,norm(src),norm(tr)).ratio()
-          s=subprocess.run(['ffmpeg','-hide_banner','-i',str(audio),'-af','silencedetect=noise=-48dB:d=1.01','-f','null','-'],capture_output=True,text=True)
-          long=[ln for ln in s.stderr.splitlines() if 'silence_duration:' in ln]
-          report={'duration_seconds':round(float(p['duration']),2),'size_bytes':int(p['size']),'format':p.get('format_name'),'asr_similarity':round(ratio,4),'hard_silence_events_over_1s':len(long),'narrator':'ru-RU-SvetlanaNeural','butterfly':'Svetlana + brighter prosody','dragonfly':'Svetlana + calmer lower prosody','burdock':'ru-RU-DmitryNeural','background':'dynamic meadow breeze + stream + insects + sparse birds, sidechain-ducked under speech'}
-          (root/'qa_report.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8'); print(json.dumps(report,ensure_ascii=False,indent=2))
-          if ratio < 0.88: raise SystemExit(f'ASR similarity too low: {ratio:.3f}')
-          if long: raise SystemExit('Detected hard silence >1 sec')
+          r=Path('tmp_tts_fairy_best'); a=r/'Сказка_о_Бабочке_ЖИВАЯ_версия.mp3'
+          p=json.loads(subprocess.check_output(['ffprobe','-v','error','-show_entries','format=duration,size,format_name','-of','json',str(a)],text=True))['format']
+          m=WhisperModel('small',device='cpu',compute_type='int8'); segs,_=m.transcribe(str(a),language='ru',beam_size=5,vad_filter=True); tr=' '.join(x.text.strip() for x in segs); (r/'asr_transcript.txt').write_text(tr,encoding='utf-8')
+          def n(x): x=x.lower().replace('ё','е'); x=re.sub(r'[^а-я0-9]+',' ',x); return re.sub(r'\s+',' ',x).strip()
+          ratio=SequenceMatcher(None,n((r/'source_spoken.txt').read_text(encoding='utf-8')),n(tr)).ratio()
+          s=subprocess.run(['ffmpeg','-hide_banner','-i',str(a),'-af','silencedetect=noise=-48dB:d=1.01','-f','null','-'],capture_output=True,text=True); long=[x for x in s.stderr.splitlines() if 'silence_duration:' in x]
+          rep={'duration_seconds':round(float(p['duration']),2),'size_bytes':int(p['size']),'format':p.get('format_name'),'asr_similarity':round(ratio,4),'hard_silence_events_over_1s':len(long),'roles':'Svetlana narrator/butterfly/dragonfly with distinct prosody; Dmitry as Old Burdock','background':'dynamic meadow + stream + insects + sparse birds, ducked under speech'}; (r/'qa_report.json').write_text(json.dumps(rep,ensure_ascii=False,indent=2),encoding='utf-8'); print(json.dumps(rep,ensure_ascii=False,indent=2))
+          if ratio<.88: raise SystemExit(f'ASR similarity too low {ratio:.3f}')
+          if long: raise SystemExit('hard silence >1 sec')
           PY
       - uses: actions/upload-artifact@v4
         with:
