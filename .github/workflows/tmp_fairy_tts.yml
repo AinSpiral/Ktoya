@@ -1,0 +1,112 @@
+name: Temporary Fairy Tale MP3
+
+on:
+  push:
+    branches: [tmp-tts-fairy-20260821]
+    paths:
+      - 'tmp_tts_fairy/**'
+      - '.github/workflows/tmp_fairy_tts.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+          python -m pip install --upgrade pip
+          pip install edge-tts numpy faster-whisper
+
+      - name: Generate warm neural Russian narration
+        run: |
+          edge-tts \
+            --voice ru-RU-SvetlanaNeural \
+            --rate=-6% \
+            --pitch=-2Hz \
+            --file tmp_tts_fairy/story.txt \
+            --write-media tmp_tts_fairy/voice.mp3 \
+            --write-subtitles tmp_tts_fairy/voice.vtt
+
+      - name: Generate subtle meadow ambience
+        run: python tmp_tts_fairy/make_ambience.py
+
+      - name: Mix narration and ambience
+        run: |
+          DUR=$(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 tmp_tts_fairy/voice.mp3)
+          ffmpeg -y -i tmp_tts_fairy/voice.mp3 -i tmp_tts_fairy/ambience.wav \
+            -filter_complex "[0:a]loudnorm=I=-16:TP=-1.5:LRA=9[voice];[1:a]volume=0.55[bg];[voice][bg]amix=inputs=2:duration=first:dropout_transition=0[a]" \
+            -map "[a]" -c:a libmp3lame -b:a 128k -ar 44100 -ac 2 \
+            "tmp_tts_fairy/Сказка_о_Бабочке_с_атмосферой.mp3"
+
+      - name: Technical QA and ASR spot/full check
+        run: |
+          python - <<'PY'
+          import json, re, subprocess
+          from difflib import SequenceMatcher
+          from faster_whisper import WhisperModel
+          from pathlib import Path
+
+          root=Path('tmp_tts_fairy')
+          src=root/'story.txt'
+          audio=root/'Сказка_о_Бабочке_с_атмосферой.mp3'
+          def probe(path):
+              out=subprocess.check_output(['ffprobe','-v','error','-show_entries','format=duration,size,format_name','-of','json',str(path)],text=True)
+              return json.loads(out)['format']
+          p=probe(audio)
+          dur=float(p['duration']); size=int(p['size'])
+          if dur < 120 or size < 1000000:
+              raise SystemExit(f'QA failed: duration={dur}, size={size}')
+
+          # Detect any unusually long silent gap. Background should prevent hard silence,
+          # but this also guards against broken narration exports.
+          s=subprocess.run(['ffmpeg','-hide_banner','-i',str(audio),'-af','silencedetect=noise=-45dB:d=1.2','-f','null','-'],capture_output=True,text=True)
+          long_silences=[ln for ln in s.stderr.splitlines() if 'silence_duration:' in ln]
+
+          model=WhisperModel('base',device='cpu',compute_type='int8')
+          segments,info=model.transcribe(str(audio),language='ru',beam_size=5,vad_filter=True)
+          transcript=' '.join(seg.text.strip() for seg in segments).strip()
+          (root/'asr_transcript.txt').write_text(transcript,encoding='utf-8')
+
+          def norm(x):
+              x=x.lower().replace('ё','е')
+              x=re.sub(r'[^а-я0-9]+',' ',x)
+              return re.sub(r'\s+',' ',x).strip()
+          ratio=SequenceMatcher(None,norm(src.read_text(encoding='utf-8')),norm(transcript)).ratio()
+          report={
+              'duration_seconds':round(dur,2),
+              'size_bytes':size,
+              'format':p.get('format_name'),
+              'asr_similarity':round(ratio,4),
+              'long_silence_events_1_2s':len(long_silences),
+              'voice':'ru-RU-SvetlanaNeural',
+              'rate':'-6%',
+              'background':'procedural meadow breeze + sparse birds + insect shimmer; ducked under narration'
+          }
+          (root/'qa_report.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8')
+          print(json.dumps(report,ensure_ascii=False,indent=2))
+          if ratio < 0.72:
+              raise SystemExit(f'QA failed: ASR similarity too low: {ratio:.3f}')
+          PY
+
+      - name: Upload MP3 and QA artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: fairy-tale-mp3
+          path: |
+            tmp_tts_fairy/Сказка_о_Бабочке_с_атмосферой.mp3
+            tmp_tts_fairy/story.txt
+            tmp_tts_fairy/asr_transcript.txt
+            tmp_tts_fairy/qa_report.json
+          retention-days: 1
