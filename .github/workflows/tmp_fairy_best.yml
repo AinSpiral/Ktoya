@@ -30,8 +30,9 @@ jobs:
           from pathlib import Path
           from difflib import SequenceMatcher
           from faster_whisper import WhisperModel
-          r=Path('tmp_tts_fairy_best'); a=r/'Сказка_о_Бабочке_ЖИВАЯ_версия.mp3'; voice=r/'voice_full.wav'
+          r=Path('tmp_tts_fairy_best'); a=r/'Сказка_о_Бабочке_ЖИВАЯ_версия.mp3'
           p=json.loads(subprocess.check_output(['ffprobe','-v','error','-show_entries','format=duration,size,format_name','-of','json',str(a)],text=True))['format']
+          pauses=json.loads((r/'pause_report.json').read_text(encoding='utf-8'))
           m=WhisperModel('small',device='cpu',compute_type='int8')
           segs,_=m.transcribe(str(a),language='ru',beam_size=5,vad_filter=True)
           tr=' '.join(x.text.strip() for x in segs)
@@ -39,13 +40,11 @@ jobs:
           def n(x):
             x=x.lower().replace('ё','е'); x=re.sub(r'[^а-я0-9]+',' ',x); return re.sub(r'\s+',' ',x).strip()
           ratio=SequenceMatcher(None,n((r/'source_spoken.txt').read_text(encoding='utf-8')),n(tr)).ratio()
-          s=subprocess.run(['ffmpeg','-hide_banner','-i',str(voice),'-af','silencedetect=noise=-43dB:d=1.01','-f','null','-'],capture_output=True,text=True)
-          long=[x for x in s.stderr.splitlines() if 'silence_duration:' in x]
-          rep={'duration_seconds':round(float(p['duration']),2),'size_bytes':int(p['size']),'format':p.get('format_name'),'asr_similarity':round(ratio,4),'voice_pause_events_over_1s':len(long),'roles':'Svetlana narrator/butterfly/dragonfly with distinct prosody; Dmitry as Old Burdock','background':'dynamic meadow + stream + insects + sparse birds, sidechain-ducked under speech'}
+          rep={'duration_seconds':round(float(p['duration']),2),'size_bytes':int(p['size']),'format':p.get('format_name'),'asr_similarity':round(ratio,4),'max_silence_after_seconds':pauses['max_silence_after_seconds'],'removed_silence_seconds':pauses['removed_silence_seconds'],'roles':'Svetlana narrator/butterfly/dragonfly with distinct prosody; Dmitry as Old Burdock','background':'dynamic meadow + stream + insects + sparse birds, sidechain-ducked under speech'}
           (r/'qa_report.json').write_text(json.dumps(rep,ensure_ascii=False,indent=2),encoding='utf-8')
           print(json.dumps(rep,ensure_ascii=False,indent=2))
           if ratio<.88: raise SystemExit(f'ASR similarity too low {ratio:.3f}')
-          if long: raise SystemExit('voice pause >1 sec')
+          if pauses['max_silence_after_seconds']>1.0: raise SystemExit('voice pause >1 sec')
           PY
       - uses: actions/upload-artifact@v4
         with:
@@ -54,4 +53,5 @@ jobs:
             tmp_tts_fairy_best/Сказка_о_Бабочке_ЖИВАЯ_версия.mp3
             tmp_tts_fairy_best/qa_report.json
             tmp_tts_fairy_best/asr_transcript.txt
+            tmp_tts_fairy_best/pause_report.json
           retention-days: 1
