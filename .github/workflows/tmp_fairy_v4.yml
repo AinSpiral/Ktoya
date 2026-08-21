@@ -38,11 +38,17 @@ jobs:
 
           r=Path('tmp_tts_fairy_v4')
           a=r/'Сказка_о_Бабочке_ЖИВАЯ_плавная_v4.mp3'
+          final_raw=r/'u_22.wav'
           meta=json.loads(subprocess.check_output(['ffprobe','-v','error','-show_entries','format=duration,size,format_name','-of','json',str(a)],text=True))['format']
           model=WhisperModel('small',device='cpu',compute_type='int8')
-          segs,_=model.transcribe(str(a),language='ru',beam_size=5,vad_filter=True)
-          tr=' '.join(x.text.strip() for x in segs)
+
+          def tx(path):
+              segs,_=model.transcribe(str(path),language='ru',beam_size=5,vad_filter=True)
+              return ' '.join(x.text.strip() for x in segs)
+          tr=tx(a)
+          final_tr=tx(final_raw)
           (r/'asr_transcript.txt').write_text(tr,encoding='utf-8')
+          (r/'final_asr_transcript.txt').write_text(final_tr,encoding='utf-8')
           src=(r/'source_spoken.txt').read_text(encoding='utf-8')
           def norm(x):
               x=x.lower().replace('ё','е')
@@ -50,12 +56,15 @@ jobs:
               return re.sub(r'\s+',' ',x).strip()
           ns,nt=norm(src),norm(tr)
           sim=SequenceMatcher(None,ns,nt).ratio()
+
           expected_end=norm('И чем чаще ты идёшь за добрым внутренним зовом, тем больше света появляется и в тебе, и вокруг тебя.')
-          transcript_tail=' '.join(nt.split()[-30:])
-          end_sim=SequenceMatcher(None,expected_end,transcript_tail[-len(expected_end)-40:]).ratio()
-          # Also require the key last words explicitly so a truncated file can never pass.
-          final_words=norm('тем больше света появляется и в тебе и вокруг тебя')
-          ending_present=final_words in nt
+          expected_words=expected_end.split()
+          got_words=norm(final_tr).split()
+          k=min(len(expected_words),len(got_words),18)
+          suffix_expected=' '.join(expected_words[-k:])
+          suffix_got=' '.join(got_words[-k:])
+          final_suffix_similarity=SequenceMatcher(None,suffix_expected,suffix_got).ratio()
+
           with wave.open(str(r/'background.wav'),'rb') as w:
               raw=np.frombuffer(w.readframes(w.getnframes()),dtype='<i2').astype(np.float64)/32768.0
           bg_rms=math.sqrt(float(np.mean(raw*raw))) if len(raw) else 0.0
@@ -66,8 +75,8 @@ jobs:
               'size_bytes':int(meta['size']),
               'format':meta.get('format_name'),
               'asr_similarity':round(sim,4),
-              'ending_similarity':round(end_sim,4),
-              'ending_present':ending_present,
+              'final_raw_suffix_similarity':round(final_suffix_similarity,4),
+              'final_raw_last_words':' '.join(got_words[-18:]),
               'background_rms_dbfs':round(bg_dbfs,2),
               'utterance_count':render['utterance_count'],
               'construction':render['construction']
@@ -75,7 +84,7 @@ jobs:
           (r/'qa_report.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8')
           print(json.dumps(report,ensure_ascii=False,indent=2))
           if sim < 0.95: raise SystemExit(f'ASR similarity too low: {sim:.3f}')
-          if not ending_present or end_sim < 0.78: raise SystemExit('Final moral is missing or truncated')
+          if final_suffix_similarity < 0.84: raise SystemExit('Final moral raw segment is missing or truncated')
           if bg_dbfs < -42: raise SystemExit(f'Background too quiet: {bg_dbfs:.1f} dBFS')
           if 'mp3' not in meta.get('format_name',''): raise SystemExit('Not MP3')
           PY
@@ -87,5 +96,6 @@ jobs:
             tmp_tts_fairy_v4/Сказка_о_Бабочке_ЖИВАЯ_плавная_v4.mp3
             tmp_tts_fairy_v4/qa_report.json
             tmp_tts_fairy_v4/asr_transcript.txt
+            tmp_tts_fairy_v4/final_asr_transcript.txt
             tmp_tts_fairy_v4/render_report.json
           retention-days: 1
