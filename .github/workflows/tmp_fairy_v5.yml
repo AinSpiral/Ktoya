@@ -1,0 +1,64 @@
+name: Temporary Fairy Tale V5
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg curl >/dev/null
+          pip install -q edge-tts faster-whisper numpy
+      - name: Download ambience
+        run: |
+          curl -L --fail --retry 3 -o tmp_tts_fairy_v5/birds.ogg "https://upload.wikimedia.org/wikipedia/commons/2/2f/Birds_chirping_in_a_garden.ogg"
+          curl -L --fail --retry 3 -o tmp_tts_fairy_v5/stream.ogg "https://upload.wikimedia.org/wikipedia/commons/8/84/Swale.ogg"
+      - name: Render
+        run: python tmp_tts_fairy_v5/render_v5.py
+      - name: QA
+        run: |
+          python - <<'PY'
+          import json,re,subprocess,wave,math
+          from pathlib import Path
+          from difflib import SequenceMatcher
+          import numpy as np
+          from faster_whisper import WhisperModel
+          r=Path('tmp_tts_fairy_v5'); a=r/'Сказка_о_Бабочке_сонная_v5.mp3'
+          model=WhisperModel('small',device='cpu',compute_type='int8')
+          segs,_=model.transcribe(str(a),language='ru',beam_size=5,vad_filter=True)
+          tr=' '.join(s.text.strip() for s in segs); (r/'asr.txt').write_text(tr,encoding='utf-8')
+          src=(r/'source_spoken.txt').read_text(encoding='utf-8')
+          def norm(x):
+            x=x.lower().replace('ё','е'); x=re.sub(r'[^а-я0-9]+',' ',x); return re.sub(r'\s+',' ',x).strip()
+          sim=SequenceMatcher(None,norm(src),norm(tr)).ratio()
+          expected=norm('И чем чаще ты идёшь за добрым внутренним зовом, тем больше света появляется и в тебе, и вокруг тебя')
+          got=' '.join(norm(tr).split()[-18:]); ends=SequenceMatcher(None,expected,got).ratio()
+          # decode tail and verify >=1.0 sec near-digital silence after last non-silent sample
+          subprocess.run(['ffmpeg','-loglevel','error','-y','-i',str(a),'-ar','44100','-ac','1','-c:a','pcm_s16le',str(r/'qa.wav')],check=True)
+          with wave.open(str(r/'qa.wav'),'rb') as w:
+            sr=w.getframerate(); data=np.frombuffer(w.readframes(w.getnframes()),dtype='<i2').astype(float)/32768
+          idx=np.flatnonzero(np.abs(data)>10**(-68/20)); tail=(len(data)-1-idx[-1])/sr if len(idx) else 0
+          meta=json.loads(subprocess.check_output(['ffprobe','-v','error','-show_entries','format=duration,size,format_name','-of','json',str(a)],text=True))['format']
+          rep={'duration_seconds':round(float(meta['duration']),2),'size_bytes':int(meta['size']),'asr_similarity':round(sim,4),'ending_similarity':round(ends,4),'true_silence_after_last_sound_seconds':round(tail,3),'narrator':'ru-RU-SvetlanaNeural (native Russian)','ending_complete':ends>=0.84}
+          (r/'qa_report.json').write_text(json.dumps(rep,ensure_ascii=False,indent=2),encoding='utf-8'); print(json.dumps(rep,ensure_ascii=False,indent=2))
+          if sim<.95: raise SystemExit('ASR too low')
+          if ends<.84: raise SystemExit('ending incomplete')
+          if tail<1.0: raise SystemExit('final silence too short')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fairy-tale-v5
+          path: |
+            tmp_tts_fairy_v5/Сказка_о_Бабочке_сонная_v5.mp3
+            tmp_tts_fairy_v5/qa_report.json
+            tmp_tts_fairy_v5/asr.txt
+          retention-days: 1
