@@ -59,13 +59,12 @@ used=asyncio.run(main())
 
 (ROOT/'concat.txt').write_text('\n'.join(f"file 'u_{i:02}.wav'" for i in range(len(UTTERANCES))),encoding='utf-8')
 subprocess.run(['ffmpeg','-loglevel','error','-y','-f','concat','-safe','0','-i','concat.txt','-c:a','pcm_s16le','voice_core.wav'],cwd=ROOT,check=True)
-# 0.55 s before speech; 0.35 s ambience after speech + 1.35 s true silence
 for n,d in [('head.wav',.55),('postvoice.wav',.35),('finalsilence.wav',1.35)]:
     subprocess.run(['ffmpeg','-loglevel','error','-y','-f','lavfi','-i','anullsrc=r=44100:cl=mono','-t',str(d),str(ROOT/n)],check=True)
 (ROOT/'vf.txt').write_text("file 'head.wav'\nfile 'voice_core.wav'\nfile 'postvoice.wav'\n",encoding='utf-8')
 subprocess.run(['ffmpeg','-loglevel','error','-y','-f','concat','-safe','0','-i','vf.txt','-c:a','pcm_s16le','voice_with_head.wav'],cwd=ROOT,check=True)
 dur=float(subprocess.check_output(['ffprobe','-v','error','-show_entries','format=duration','-of','default=nw=1:nk=1',str(ROOT/'voice_with_head.wav')],text=True))
-subprocess.run(['ffmpeg','-loglevel','error','-y','-stream_loop','-1','-i',str(ROOT/'birds.ogg'),'-stream_loop','-1','-i',str(ROOT/'stream.ogg'),'-filter_complex',f"[0:a]atrim=0:{dur},asetpts=N/SR/TB,highpass=f=350,lowpass=f=8500,volume=.58[b];[1:a]atrim=0:{dur},asetpts=N/SR/TB,highpass=f=120,lowpass=f=6500,volume=.48[s];[b][s]amix=inputs=2:duration=longest:normalize=0,loudnorm=I=-27:TP=-5:LRA=7,afade=t=out:st={max(0,dur-.6)}:d=.6[bg]",'-map','[bg]','-ar','44100','-ac','2','-c:a','pcm_s16le',str(ROOT/'background.wav')],check=True)
+subprocess.run(['ffmpeg','-loglevel','error','-y','-stream_loop','-1','-i',str(ROOT/'birds.ogg'),'-stream_loop','-1','-i',str(ROOT/'stream.ogg'),'-filter_complex',f"[0:a]atrim=0:{dur},asetpts=N/SR/TB,highpass=f=350,lowpass=f=8500,volume=.58[b];[1:a]atrim=0:{dur},asetpts=N/SR/TB,highpass=f=120,lowpass=f=6500,volume=.48[s];[b][s]amix=inputs=2:duration=longest:normalize=0,loudnorm=I=-27:TP=-5:LRA=7,afade=t=out:st={max(0,dur-.6)}:d=0.6[bg]",'-map','[bg]','-ar','44100','-ac','2','-c:a','pcm_s16le',str(ROOT/'background.wav')],check=True)
 flt='[0:a]loudnorm=I=-16:TP=-1.5:LRA=9,asplit=2[v1][v2];[1:a]volume=.82[bg];[bg][v1]sidechaincompress=threshold=.024:ratio=3:attack=35:release=700[duck];[v2][duck]amix=inputs=2:duration=first:weights=1 .58:normalize=0,alimiter=limit=.96[m]'
 subprocess.run(['ffmpeg','-loglevel','error','-y','-i',str(ROOT/'voice_with_head.wav'),'-i',str(ROOT/'background.wav'),'-filter_complex',flt,'-map','[m]','-ar','44100','-ac','2','-c:a','pcm_s16le',str(ROOT/'mixed.wav')],check=True)
 (ROOT/'final_concat.txt').write_text("file 'mixed.wav'\nfile 'finalsilence.wav'\n",encoding='utf-8')
