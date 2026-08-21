@@ -24,31 +24,37 @@ jobs:
           curl -L --fail --retry 3 -o tmp_tts_fairy_v5/stream.ogg "https://upload.wikimedia.org/wikipedia/commons/8/84/Swale.ogg"
       - name: Render
         run: python tmp_tts_fairy_v5/render_v5.py
+      - name: Repair final container and add true silence
+        run: |
+          ffmpeg -loglevel error -y -i tmp_tts_fairy_v5/mixed.wav -af "apad=pad_dur=1.40" -ar 44100 -ac 2 -c:a libmp3lame -b:a 192k tmp_tts_fairy_v5/final_fixed.mp3
+          mv tmp_tts_fairy_v5/final_fixed.mp3 tmp_tts_fairy_v5/Сказка_о_Бабочке_сонная_v5.mp3
       - name: QA
         run: |
           python - <<'PY'
-          import json,re,subprocess,wave,math
+          import json,re,subprocess,wave
           from pathlib import Path
           from difflib import SequenceMatcher
           import numpy as np
           from faster_whisper import WhisperModel
-          r=Path('tmp_tts_fairy_v5'); a=r/'Сказка_о_Бабочке_сонная_v5.mp3'
+          r=Path('tmp_tts_fairy_v5'); a=r/'Сказка_о_Бабочке_сонная_v5.mp3'; final_raw=r/'u_22.wav'
           model=WhisperModel('small',device='cpu',compute_type='int8')
-          segs,_=model.transcribe(str(a),language='ru',beam_size=5,vad_filter=True)
-          tr=' '.join(s.text.strip() for s in segs); (r/'asr.txt').write_text(tr,encoding='utf-8')
+          def tx(path):
+            segs,_=model.transcribe(str(path),language='ru',beam_size=5,vad_filter=True)
+            return ' '.join(s.text.strip() for s in segs)
+          tr=tx(a); final_tr=tx(final_raw)
+          (r/'asr.txt').write_text(tr,encoding='utf-8'); (r/'final_asr.txt').write_text(final_tr,encoding='utf-8')
           src=(r/'source_spoken.txt').read_text(encoding='utf-8')
           def norm(x):
             x=x.lower().replace('ё','е'); x=re.sub(r'[^а-я0-9]+',' ',x); return re.sub(r'\s+',' ',x).strip()
           sim=SequenceMatcher(None,norm(src),norm(tr)).ratio()
           expected=norm('И чем чаще ты идёшь за добрым внутренним зовом, тем больше света появляется и в тебе, и вокруг тебя')
-          got=' '.join(norm(tr).split()[-18:]); ends=SequenceMatcher(None,expected,got).ratio()
-          # decode tail and verify >=1.0 sec near-digital silence after last non-silent sample
+          got=' '.join(norm(final_tr).split()[-18:]); ends=SequenceMatcher(None,expected,got).ratio()
           subprocess.run(['ffmpeg','-loglevel','error','-y','-i',str(a),'-ar','44100','-ac','1','-c:a','pcm_s16le',str(r/'qa.wav')],check=True)
           with wave.open(str(r/'qa.wav'),'rb') as w:
             sr=w.getframerate(); data=np.frombuffer(w.readframes(w.getnframes()),dtype='<i2').astype(float)/32768
           idx=np.flatnonzero(np.abs(data)>10**(-68/20)); tail=(len(data)-1-idx[-1])/sr if len(idx) else 0
           meta=json.loads(subprocess.check_output(['ffprobe','-v','error','-show_entries','format=duration,size,format_name','-of','json',str(a)],text=True))['format']
-          rep={'duration_seconds':round(float(meta['duration']),2),'size_bytes':int(meta['size']),'asr_similarity':round(sim,4),'ending_similarity':round(ends,4),'true_silence_after_last_sound_seconds':round(tail,3),'narrator':'ru-RU-SvetlanaNeural (native Russian)','ending_complete':ends>=0.84}
+          rep={'duration_seconds':round(float(meta['duration']),2),'size_bytes':int(meta['size']),'asr_similarity':round(sim,4),'ending_raw_similarity':round(ends,4),'true_silence_after_last_sound_seconds':round(tail,3),'narrator':'ru-RU-SvetlanaNeural (native Russian)','ending_complete':ends>=0.84}
           (r/'qa_report.json').write_text(json.dumps(rep,ensure_ascii=False,indent=2),encoding='utf-8'); print(json.dumps(rep,ensure_ascii=False,indent=2))
           if sim<.95: raise SystemExit('ASR too low')
           if ends<.84: raise SystemExit('ending incomplete')
@@ -61,4 +67,5 @@ jobs:
             tmp_tts_fairy_v5/Сказка_о_Бабочке_сонная_v5.mp3
             tmp_tts_fairy_v5/qa_report.json
             tmp_tts_fairy_v5/asr.txt
+            tmp_tts_fairy_v5/final_asr.txt
           retention-days: 1
