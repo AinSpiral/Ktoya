@@ -1,0 +1,88 @@
+name: Temporary Fairy Tale Smooth V3
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install audio tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg curl >/dev/null
+          pip install -q edge-tts numpy faster-whisper
+      - name: Download real CC0 meadow ambience
+        run: |
+          curl -L --fail --retry 3 -o tmp_tts_fairy_v3/birds.ogg "https://upload.wikimedia.org/wikipedia/commons/2/2f/Birds_chirping_in_a_garden.ogg"
+          curl -L --fail --retry 3 -o tmp_tts_fairy_v3/stream.ogg "https://upload.wikimedia.org/wikipedia/commons/8/84/Swale.ogg"
+      - name: Render smooth multi-role audiobook
+        run: python tmp_tts_fairy_v3/render_v3.py
+      - name: QA text, pauses, ambience and file
+        run: |
+          python - <<'PY'
+          import json, re, subprocess, wave, math
+          from pathlib import Path
+          from difflib import SequenceMatcher
+          import numpy as np
+          from faster_whisper import WhisperModel
+
+          r=Path('tmp_tts_fairy_v3')
+          audio=r/'Сказка_о_Бабочке_ЖИВАЯ_плавная_v3.mp3'
+          meta=json.loads(subprocess.check_output(['ffprobe','-v','error','-show_entries','format=duration,size,format_name','-of','json',str(audio)],text=True))['format']
+          render=json.loads((r/'render_report.json').read_text(encoding='utf-8'))
+
+          # Background must be genuinely present, not decorative metadata.
+          with wave.open(str(r/'background.wav'),'rb') as w:
+              raw=np.frombuffer(w.readframes(w.getnframes()),dtype='<i2').astype(np.float64)/32768.0
+          bg_rms=math.sqrt(float(np.mean(raw*raw))) if len(raw) else 0.0
+          bg_dbfs=20*math.log10(max(bg_rms,1e-12))
+
+          model=WhisperModel('small',device='cpu',compute_type='int8')
+          segs,_=model.transcribe(str(audio),language='ru',beam_size=5,vad_filter=True)
+          transcript=' '.join(s.text.strip() for s in segs)
+          (r/'asr_transcript.txt').write_text(transcript,encoding='utf-8')
+          def norm(x):
+              x=x.lower().replace('ё','е')
+              x=re.sub(r'[^а-я0-9]+',' ',x)
+              return re.sub(r'\s+',' ',x).strip()
+          source=(r/'source_spoken.txt').read_text(encoding='utf-8')
+          sim=SequenceMatcher(None,norm(source),norm(transcript)).ratio()
+
+          report={
+              'duration_seconds':round(float(meta['duration']),2),
+              'size_bytes':int(meta['size']),
+              'format':meta.get('format_name'),
+              'asr_similarity':round(sim,4),
+              'max_added_gap_seconds':render['max_added_gap_seconds'],
+              'kept_natural_tts_tail_seconds':render['kept_natural_tts_tail_seconds'],
+              'background_rms_dbfs':round(bg_dbfs,2),
+              'background':'real CC0 birds + real CC0 stream; target -26 LUFS before gentle side-chain ducking',
+              'voices':render['voices_used']
+          }
+          (r/'qa_report.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8')
+          print(json.dumps(report,ensure_ascii=False,indent=2))
+          if sim < 0.94: raise SystemExit(f'ASR similarity too low: {sim:.3f}')
+          if render['max_added_gap_seconds'] > 0.30: raise SystemExit('added pause too long')
+          if bg_dbfs < -42: raise SystemExit(f'background too quiet: {bg_dbfs:.1f} dBFS')
+          if 'mp3' not in meta.get('format_name',''): raise SystemExit('not mp3')
+          PY
+      - name: Upload finished MP3
+        uses: actions/upload-artifact@v4
+        with:
+          name: fairy-tale-smooth-v3
+          path: |
+            tmp_tts_fairy_v3/Сказка_о_Бабочке_ЖИВАЯ_плавная_v3.mp3
+            tmp_tts_fairy_v3/qa_report.json
+            tmp_tts_fairy_v3/asr_transcript.txt
+            tmp_tts_fairy_v3/render_report.json
+          retention-days: 1
