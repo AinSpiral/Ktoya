@@ -1,0 +1,91 @@
+name: Temporary Fairy Tale Smooth V4
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install audio tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg curl >/dev/null
+          pip install -q edge-tts numpy faster-whisper
+      - name: Download real meadow ambience
+        run: |
+          curl -L --fail --retry 3 -o tmp_tts_fairy_v4/birds.ogg "https://upload.wikimedia.org/wikipedia/commons/2/2f/Birds_chirping_in_a_garden.ogg"
+          curl -L --fail --retry 3 -o tmp_tts_fairy_v4/stream.ogg "https://upload.wikimedia.org/wikipedia/commons/8/84/Swale.ogg"
+      - name: Render smooth audiobook
+        run: python tmp_tts_fairy_v4/render_v4.py
+      - name: QA full text and ending
+        run: |
+          python - <<'PY'
+          import json,re,subprocess,math,wave
+          from pathlib import Path
+          from difflib import SequenceMatcher
+          import numpy as np
+          from faster_whisper import WhisperModel
+
+          r=Path('tmp_tts_fairy_v4')
+          a=r/'Сказка_о_Бабочке_ЖИВАЯ_плавная_v4.mp3'
+          meta=json.loads(subprocess.check_output(['ffprobe','-v','error','-show_entries','format=duration,size,format_name','-of','json',str(a)],text=True))['format']
+          model=WhisperModel('small',device='cpu',compute_type='int8')
+          segs,_=model.transcribe(str(a),language='ru',beam_size=5,vad_filter=True)
+          tr=' '.join(x.text.strip() for x in segs)
+          (r/'asr_transcript.txt').write_text(tr,encoding='utf-8')
+          src=(r/'source_spoken.txt').read_text(encoding='utf-8')
+          def norm(x):
+              x=x.lower().replace('ё','е')
+              x=re.sub(r'[^а-я0-9]+',' ',x)
+              return re.sub(r'\s+',' ',x).strip()
+          ns,nt=norm(src),norm(tr)
+          sim=SequenceMatcher(None,ns,nt).ratio()
+          expected_end=norm('И чем чаще ты идёшь за добрым внутренним зовом, тем больше света появляется и в тебе, и вокруг тебя.')
+          transcript_tail=' '.join(nt.split()[-30:])
+          end_sim=SequenceMatcher(None,expected_end,transcript_tail[-len(expected_end)-40:]).ratio()
+          # Also require the key last words explicitly so a truncated file can never pass.
+          final_words=norm('тем больше света появляется и в тебе и вокруг тебя')
+          ending_present=final_words in nt
+          with wave.open(str(r/'background.wav'),'rb') as w:
+              raw=np.frombuffer(w.readframes(w.getnframes()),dtype='<i2').astype(np.float64)/32768.0
+          bg_rms=math.sqrt(float(np.mean(raw*raw))) if len(raw) else 0.0
+          bg_dbfs=20*math.log10(max(bg_rms,1e-12))
+          render=json.loads((r/'render_report.json').read_text(encoding='utf-8'))
+          report={
+              'duration_seconds':round(float(meta['duration']),2),
+              'size_bytes':int(meta['size']),
+              'format':meta.get('format_name'),
+              'asr_similarity':round(sim,4),
+              'ending_similarity':round(end_sim,4),
+              'ending_present':ending_present,
+              'background_rms_dbfs':round(bg_dbfs,2),
+              'utterance_count':render['utterance_count'],
+              'construction':render['construction']
+          }
+          (r/'qa_report.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8')
+          print(json.dumps(report,ensure_ascii=False,indent=2))
+          if sim < 0.95: raise SystemExit(f'ASR similarity too low: {sim:.3f}')
+          if not ending_present or end_sim < 0.78: raise SystemExit('Final moral is missing or truncated')
+          if bg_dbfs < -42: raise SystemExit(f'Background too quiet: {bg_dbfs:.1f} dBFS')
+          if 'mp3' not in meta.get('format_name',''): raise SystemExit('Not MP3')
+          PY
+      - name: Upload finished MP3
+        uses: actions/upload-artifact@v4
+        with:
+          name: fairy-tale-smooth-v4
+          path: |
+            tmp_tts_fairy_v4/Сказка_о_Бабочке_ЖИВАЯ_плавная_v4.mp3
+            tmp_tts_fairy_v4/qa_report.json
+            tmp_tts_fairy_v4/asr_transcript.txt
+            tmp_tts_fairy_v4/render_report.json
+          retention-days: 1
