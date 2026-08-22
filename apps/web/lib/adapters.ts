@@ -7,9 +7,31 @@ export interface AIProvider {
 
 export interface TranscriptionProvider {
   isAvailable(): boolean;
+  canRetranscribe(): boolean;
+  retranscriptionUnavailableReason(): string | null;
   start(onText: (text: string) => void, onError: (message: string) => void): void;
   stop(): void;
 }
+
+/**
+ * Browser recognition can listen to a live microphone but cannot safely replay
+ * a stored Blob through SpeechRecognition.  A production provider can replace
+ * this boundary and implement real retranscription without changing provenance.
+ */
+export class BrowserSpeechTranscriptionProvider implements TranscriptionProvider {
+  isAvailable() {
+    return typeof window !== 'undefined' && Boolean((window as Window & { SpeechRecognition?: unknown; webkitSpeechRecognition?: unknown }).SpeechRecognition
+      ?? (window as Window & { webkitSpeechRecognition?: unknown }).webkitSpeechRecognition);
+  }
+  canRetranscribe() { return false; }
+  retranscriptionUnavailableReason() {
+    return 'Автоматическая повторная расшифровка сохранённого аудио станет доступна после подключения STT-провайдера. Сейчас можно создать отдельную ручную версию текста.';
+  }
+  start() { throw new Error('Live browser transcription is coordinated by the recording lifecycle.'); }
+  stop() { /* SpeechRecognition is stopped by the recording lifecycle. */ }
+}
+
+export const browserSpeechTranscriptionProvider = new BrowserSpeechTranscriptionProvider();
 
 export interface TTSProvider {
   isAvailable(): boolean;

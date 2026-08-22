@@ -122,7 +122,12 @@ export function markAudioUpload(story: Story, fragmentId: string, patch: Partial
   };
 }
 
-/** Deleting an original never deletes its transcript or any composed text. */
+/** Hiding is reversible and never changes the upload/deletion state. */
+export function markAudioHidden(story: Story, fragmentId: string, hidden: boolean): Story {
+  return markAudioUpload(story, fragmentId, { hiddenAt: hidden ? new Date().toISOString() : undefined });
+}
+
+/** Soft-deleting an original never deletes its transcript or any composed text. */
 export function markAudioDeleted(story: Story, fragmentId: string): Story {
   return markAudioUpload(story, fragmentId, { uploadStatus: 'deleted', deletedAt: new Date().toISOString() });
 }

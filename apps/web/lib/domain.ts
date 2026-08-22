@@ -33,6 +33,8 @@ export interface AudioFragment {
   uploadStatus: 'pending' | 'saved' | 'failed' | 'deleted';
   objectKey?: string;
   uploadedAt?: string;
+  /** Hiding only changes reader visibility; the original and text remain intact. */
+  hiddenAt?: string;
   deletedAt?: string;
 }
 

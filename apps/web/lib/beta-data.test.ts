@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createEmptyState } from './domain';
 import { migrateLegacyState } from './legacy-migration';
-import { appendTranscriptRevision, makeStory, markAudioDeleted } from './story-logic';
+import { appendTranscriptRevision, makeStory, markAudioDeleted, markAudioHidden } from './story-logic';
 
 describe('safe beta data model', () => {
   it('keeps the first audio fragment when a second one is added', () => {
@@ -19,6 +19,18 @@ describe('safe beta data model', () => {
     expect(deleted.audioFragments?.[0].uploadStatus).toBe('deleted');
     expect(deleted.transcriptRevisions?.[0].text).toBe('Текст остаётся.');
     expect(deleted.sources.some((source) => source.text === 'Текст остаётся.')).toBe(true);
+  });
+
+  it('can hide and restore audio without changing saved text or deletion state', () => {
+    const story = makeStory({ sourceText: 'Текст остаётся.', sourceMode: 'voice', answers: [] });
+    const withAudio = { ...story, audioFragments: [{ id: 'fragment-one', position: 1, createdAt: story.createdAt, contentType: 'audio/webm' as const, uploadStatus: 'saved' as const }] };
+    const withTranscript = appendTranscriptRevision(withAudio, { audioFragmentId: 'fragment-one', text: 'Текст остаётся.', provider: 'manual' });
+    const hidden = markAudioHidden(withTranscript, 'fragment-one', true);
+    const restored = markAudioHidden(hidden, 'fragment-one', false);
+    expect(hidden.audioFragments?.[0]).toMatchObject({ uploadStatus: 'saved' });
+    expect(hidden.audioFragments?.[0].hiddenAt).toBeTruthy();
+    expect(restored.audioFragments?.[0].hiddenAt).toBeUndefined();
+    expect(restored.transcriptRevisions?.[0].text).toBe('Текст остаётся.');
   });
 
   it('adds a second transcript revision without erasing the first', () => {
