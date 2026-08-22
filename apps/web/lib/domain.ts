@@ -56,6 +56,9 @@ export interface InterviewAnswer {
   createdAt?: string;
   audioFragmentId?: string;
   transcriptRevisionId?: string;
+  /** All recordings are retained when one answer is captured in several takes. */
+  audioFragmentIds?: string[];
+  transcriptRevisionIds?: string[];
 }
 
 export interface Revision {

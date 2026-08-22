@@ -90,6 +90,7 @@ export function appendTranscriptRevision(story: Story, input: {
   text: string;
   provider: TranscriptRevision['provider'];
   verificationStatus?: TranscriptRevision['verificationStatus'];
+  questionId?: string;
 }): Story {
   const now = new Date().toISOString();
   const previous = story.transcriptRevisions ?? [];
@@ -108,7 +109,7 @@ export function appendTranscriptRevision(story: Story, input: {
   ];
   const sources: StorySource[] = [
     ...story.sources,
-    { id: crypto.randomUUID(), kind: 'transcript', text: revision.text, createdAt: now, audioFragmentId: input.audioFragmentId, transcriptRevisionId: revision.id },
+    { id: crypto.randomUUID(), kind: 'transcript', text: revision.text, createdAt: now, audioFragmentId: input.audioFragmentId, transcriptRevisionId: revision.id, questionId: input.questionId },
   ];
   return { ...story, transcriptRevisions, sources, updatedAt: now };
 }

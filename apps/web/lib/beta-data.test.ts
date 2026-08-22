@@ -30,6 +30,20 @@ describe('safe beta data model', () => {
     expect(second.transcriptRevisions?.filter((item) => item.selected).map((item) => item.text)).toEqual(['Вторая версия.']);
   });
 
+  it('keeps the voice-answer question link when retranscribing the same audio', () => {
+    const story = makeStory({ sourceText: 'Первый ответ.', sourceMode: 'voice', answers: [] });
+    const withAudio = { ...story, audioFragments: [{ id: 'answer-audio', position: 1, createdAt: story.createdAt, contentType: 'audio/webm' as const, uploadStatus: 'saved' as const }] };
+    const first = appendTranscriptRevision(withAudio, { audioFragmentId: 'answer-audio', text: 'Первая версия ответа.', provider: 'manual', questionId: 'question-2' });
+    const second = appendTranscriptRevision(first, { audioFragmentId: 'answer-audio', text: 'Исправленная версия ответа.', provider: 'manual', questionId: 'question-2' });
+    expect(second.transcriptRevisions?.map((item) => item.audioFragmentId)).toEqual(['answer-audio', 'answer-audio']);
+    expect(second.transcriptRevisions?.map((item) => item.text)).toEqual(['Первая версия ответа.', 'Исправленная версия ответа.']);
+    expect(second.sources.at(-1)).toMatchObject({
+      questionId: 'question-2',
+      audioFragmentId: 'answer-audio',
+      transcriptRevisionId: second.transcriptRevisions?.at(-1)?.id,
+    });
+  });
+
   it('preserves a legacy story and maps its audio and transcript into linked objects', () => {
     const state = createEmptyState();
     const legacy = {
