@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createEmptyState } from './domain';
+import { createEmptyState, normalizeAppState } from './domain';
 import { assembleStory, makeStory, startTrial, storyContainsOnlySources } from './story-logic';
 
 describe('deterministic story assembly', () => {
@@ -34,5 +34,27 @@ describe('trial lifecycle', () => {
     expect(started.trial.startedAt).toBeTruthy();
     expect(started.trial.endsAt).toBeTruthy();
     expect((new Date(started.trial.endsAt!).getTime() - new Date(started.trial.startedAt!).getTime()) / 86_400_000).toBe(10);
+  });
+});
+
+describe('book structure compatibility', () => {
+  it('keeps a chapter layer ready for future manuscript import', () => {
+    const state = createEmptyState();
+    expect(state.book.chapterIds).toEqual([state.chapters[0].id]);
+    expect(state.chapters[0]).toMatchObject({ kind: 'life-stories', storyIds: [] });
+  });
+
+  it('upgrades a saved flat Beta book without losing its stories', () => {
+    const state = createEmptyState();
+    const legacy = {
+      ...state,
+      version: 1,
+      book: { ...state.book, storyIds: ['story-1'], chapterIds: undefined },
+      chapters: undefined,
+    } as unknown as Parameters<typeof normalizeAppState>[0];
+    const normalized = normalizeAppState(legacy);
+    expect(normalized.version).toBe(2);
+    expect(normalized.chapters[0].storyIds).toEqual(['story-1']);
+    expect(normalized.book.chapterIds).toEqual([normalized.chapters[0].id]);
   });
 });

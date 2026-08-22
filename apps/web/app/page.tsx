@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { HeaderAuthAdapter, HttpStorageAdapter, browserExportAdapter } from '@/lib/adapters';
-import { createEmptyState, type AppState, type FeedbackEntry, type InterviewAnswer, type PrivacyLevel, type Story, type StoryStyle } from '@/lib/domain';
+import { createEmptyState, normalizeAppState, type AppState, type FeedbackEntry, type InterviewAnswer, type PrivacyLevel, type Story, type StoryStyle } from '@/lib/domain';
 import { FOLLOW_UP_QUESTION, MEMORY_QUESTIONS, makeStory, startTrial } from '@/lib/story-logic';
 
 type View = 'landing' | 'first-choice' | 'method' | 'capture' | 'interview' | 'draft' | 'register' | 'workspace';
@@ -68,7 +68,7 @@ export default function Home() {
       .then(([saved, user]) => {
         if (!active) return;
         if (saved) {
-          const reconciled = startTrial(saved);
+          const reconciled = startTrial(normalizeAppState(saved));
           setAppState(reconciled);
           if (reconciled.trial.endsAt !== saved.trial.endsAt || reconciled.trial.status !== saved.trial.status) void storage.save(reconciled);
         }
@@ -138,11 +138,15 @@ export default function Home() {
       catch { setVoiceMessage('История сохранена, но аудиозапись загрузить не удалось.'); }
     }
     const now = new Date().toISOString();
+    const primaryChapter = appState.chapters[0];
     let next: AppState = {
       ...appState,
       author: appState.author ?? (author ? { id: crypto.randomUUID(), name: author.name, email: author.email, createdAt: now } : null),
       stories: [...appState.stories, story],
       book: { ...appState.book, storyIds: [...appState.book.storyIds, story.id], updatedAt: now },
+      chapters: primaryChapter
+        ? appState.chapters.map((chapter, index) => index === 0 ? { ...chapter, storyIds: [...chapter.storyIds, story.id], updatedAt: now } : chapter)
+        : appState.chapters,
       updatedAt: now,
     };
     next = startTrial(next);
