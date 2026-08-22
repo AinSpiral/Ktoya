@@ -56,6 +56,14 @@ describe('safe beta data model', () => {
     });
   });
 
+  it('keeps a browser-recognition completeness warning with its transcript revision', () => {
+    const story = makeStory({ sourceText: 'Начало записи.', sourceMode: 'voice', answers: [] });
+    const withAudio = { ...story, audioFragments: [{ id: 'long-audio', position: 1, createdAt: story.createdAt, contentType: 'audio/webm' as const, uploadStatus: 'saved' as const, recognitionStatus: 'incomplete' as const }] };
+    const next = appendTranscriptRevision(withAudio, { audioFragmentId: 'long-audio', text: 'Начало записи.', provider: 'browser-speech-recognition', verificationStatus: 'unverified', completenessStatus: 'incomplete' });
+    expect(next.audioFragments?.[0].recognitionStatus).toBe('incomplete');
+    expect(next.transcriptRevisions?.[0]).toMatchObject({ audioFragmentId: 'long-audio', verificationStatus: 'unverified', completenessStatus: 'incomplete' });
+  });
+
   it('preserves a legacy story and maps its audio and transcript into linked objects', () => {
     const state = createEmptyState();
     const legacy = {

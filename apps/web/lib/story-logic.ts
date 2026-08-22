@@ -90,6 +90,7 @@ export function appendTranscriptRevision(story: Story, input: {
   text: string;
   provider: TranscriptRevision['provider'];
   verificationStatus?: TranscriptRevision['verificationStatus'];
+  completenessStatus?: TranscriptRevision['completenessStatus'];
   questionId?: string;
 }): Story {
   const now = new Date().toISOString();
@@ -102,6 +103,7 @@ export function appendTranscriptRevision(story: Story, input: {
     createdAt: now,
     selected: true,
     verificationStatus: input.verificationStatus ?? (input.provider === 'manual' ? 'confirmed' : 'unverified'),
+    completenessStatus: input.completenessStatus ?? 'complete',
   };
   const transcriptRevisions = [
     ...previous.map((item) => item.audioFragmentId === input.audioFragmentId ? { ...item, selected: false } : item),

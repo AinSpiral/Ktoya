@@ -36,6 +36,8 @@ export interface AudioFragment {
   /** Hiding only changes reader visibility; the original and text remain intact. */
   hiddenAt?: string;
   deletedAt?: string;
+  /** Browser recognition failures are visible; a partial tail is never silently complete. */
+  recognitionStatus?: 'complete' | 'incomplete' | 'unavailable';
 }
 
 /** A recognition attempt is append-only; one revision can be selected for reading. */
@@ -48,6 +50,7 @@ export interface TranscriptRevision {
   selected: boolean;
   /** Browser recognition is a draft until the Author explicitly checks it. */
   verificationStatus?: 'unverified' | 'confirmed';
+  completenessStatus?: 'complete' | 'incomplete' | 'unavailable';
 }
 
 export interface InterviewAnswer {

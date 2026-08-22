@@ -130,6 +130,8 @@ button:disabled { cursor: not-allowed; opacity: .42; transform: none !important;
 .status-message { width: 100%; color: #5d7168; line-height: 1.5; }
 .question-count { margin-bottom: 18px; padding: 8px 13px; border: 1px solid var(--line); border-radius: 999px; color: #6b7d75; font-size: 12px; }
 .question-stage .answer-textarea { margin-top: 40px; min-height: 190px; }
+.answer-composer { position: relative; }
+.answer-composer .compact-record { position: absolute; right: 16px; bottom: 16px; min-height: 42px; background: var(--pine); }
 .review-heading { display: grid; grid-template-columns: 1fr auto; gap: 35px; align-items: end; }
 .source-badge { max-width: 210px; padding: 12px 16px; border-radius: 14px; color: var(--pine); background: #dce6d5; font-size: 12px; font-weight: 800; line-height: 1.4; }
 .paper-page, .reader-page { margin-top: 55px; padding: clamp(42px, 7vw, 100px); border: 1px solid rgba(84,75,58,.12); border-radius: 5px 25px 25px 5px; background: #fffdf5; box-shadow: -12px 12px 0 #e3dac8, var(--shadow); }
@@ -311,6 +313,7 @@ button:disabled { cursor: not-allowed; opacity: .42; transform: none !important;
   .writing-stage, .review-stage, .register-stage { width: min(100% - 32px, 980px); padding: 52px 0 90px; }
   .writing-stage h1, .review-heading h1, .register-stage h1, .panel-page > h1 { font-size: 46px; }
   .story-textarea, .answer-textarea, .feedback-page textarea { min-height: 240px; padding: 20px; font-size: 20px; }
+  .answer-composer .compact-record { position: static; margin-top: 12px; }
   .writing-stage .flow-actions { justify-content: center; }
   .paper-page, .reader-page { padding: 38px 24px; border-radius: 4px 16px 16px 4px; box-shadow: -7px 7px 0 #e3dac8, 0 18px 45px rgba(29,53,45,.1); }
   .register-stage form, .privacy-card, .balance-card { padding: 24px 18px; }

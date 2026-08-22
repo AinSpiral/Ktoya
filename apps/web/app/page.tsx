@@ -42,7 +42,6 @@ export default function Home() {
   const [appState, setAppState] = useState<AppState>(() => createEmptyState());
   const [loaded, setLoaded] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
-  const [sourceMode, setSourceMode] = useState<'text' | 'voice'>('text');
   const [sourceText, setSourceText] = useState('');
   const [memoryQuestion, setMemoryQuestion] = useState(0);
   const [answer, setAnswer] = useState('');
@@ -100,6 +99,22 @@ export default function Home() {
   useEffect(() => { capturedFragmentsRef.current = capturedFragments; }, [capturedFragments]);
   useEffect(() => { answerCapturedFragmentsRef.current = answerCapturedFragments; }, [answerCapturedFragments]);
   useEffect(() => { capturePurposeRef.current = capturePurpose; }, [capturePurpose]);
+  useEffect(() => {
+    const current = window.history.state as { ktoyaView?: View; ktoyaFlow?: boolean } | null;
+    if (current?.ktoyaView !== view) {
+      const state = { ...(current ?? {}), ktoyaFlow: true, ktoyaView: view };
+      if (current?.ktoyaFlow) window.history.pushState(state, '', `#${view}`);
+      else window.history.replaceState(state, '', `#${view}`);
+    }
+  }, [view]);
+  useEffect(() => {
+    const onPopState = (event: PopStateEvent) => {
+      const previous = event.state as { ktoyaView?: View } | null;
+      setView(previous?.ktoyaView ?? 'landing');
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
   useEffect(() => () => {
     [...capturedFragmentsRef.current, ...answerCapturedFragmentsRef.current].forEach((item) => URL.revokeObjectURL(item.url));
   }, []);
@@ -118,8 +133,7 @@ export default function Home() {
     }
   }
 
-  function resetStoryFlow(mode: 'text' | 'voice' = 'text') {
-    setSourceMode(mode);
+  function resetStoryFlow() {
     setSourceText('');
     setAnswer('');
     setInterviewAnswers([]);
@@ -145,7 +159,7 @@ export default function Home() {
 
   function assemble() {
     const voiceText = capturedFragments.map((item) => item.transcript.trim()).filter(Boolean).join('\n\n');
-    const primaryText = sourceMode === 'voice' ? voiceText : sourceText;
+    const primaryText = [sourceText.trim(), voiceText].filter(Boolean).join('\n\n');
     if (!primaryText.trim()) return;
     const answers: InterviewAnswer[] = [
       ...interviewAnswers,
@@ -160,7 +174,7 @@ export default function Home() {
     ];
     const now = new Date().toISOString();
     const transcriptRevisions = allFragments.filter(({ item }) => item.transcript.trim()).map(({ item }) => ({
-      id: crypto.randomUUID(), audioFragmentId: item.fragment.id, text: item.transcript.trim(), provider: 'browser-speech-recognition' as const, createdAt: now, selected: true, verificationStatus: 'unverified' as const,
+      id: crypto.randomUUID(), audioFragmentId: item.fragment.id, text: item.transcript.trim(), provider: 'browser-speech-recognition' as const, createdAt: now, selected: true, verificationStatus: 'unverified' as const, completenessStatus: item.fragment.recognitionStatus ?? 'unavailable' as const,
     }));
     const revisionByFragmentId = new Map(transcriptRevisions.map((revision) => [revision.audioFragmentId, revision.id]));
     const completeAnswers = answers.map((answerItem) => {
@@ -170,8 +184,8 @@ export default function Home() {
       const transcriptRevisionIds = audioFragmentIds.map((id) => revisionByFragmentId.get(id)).filter((id): id is string => Boolean(id));
       return { ...answerItem, audioFragmentId: audioFragmentIds[0], audioFragmentIds, transcriptRevisionId: transcriptRevisionIds[0], transcriptRevisionIds };
     });
-    const generated = makeStory({ sourceText: primaryText, sourceMode, answers: completeAnswers, transcriptProvider: sourceMode === 'voice' ? 'browser-speech-recognition' : undefined });
-    const base = sourceMode === 'voice' ? { ...generated, id: captureStoryIdRef.current } : generated;
+    const generated = makeStory({ sourceText: sourceText.trim() || voiceText, sourceMode: sourceText.trim() ? 'text' : 'voice', answers: completeAnswers, transcriptProvider: capturedFragments.length ? 'browser-speech-recognition' : undefined });
+    const base = capturedFragments.length ? { ...generated, id: captureStoryIdRef.current } : generated;
     const nextDraft = {
       ...base,
       interviewAnswers: completeAnswers,
@@ -266,6 +280,7 @@ export default function Home() {
       recorderRef.current = recorder;
       let recordedBlob: Blob | null = null;
       let recognitionFinished = !browserSpeechTranscriptionProvider.isAvailable();
+      let recognitionStatus: NonNullable<AudioFragment['recognitionStatus']> = recognitionFinished ? 'unavailable' : 'complete';
       let fragmentFinalized = false;
       let finalizationTimer: number | undefined;
       const finalizeFragment = (force = false) => {
@@ -275,7 +290,7 @@ export default function Home() {
         const now = new Date().toISOString();
         const currentFragments = purpose === 'answer' ? answerCapturedFragmentsRef.current : capturedFragmentsRef.current;
         const item: CapturedFragment = {
-          fragment: { id: crypto.randomUUID(), position: currentFragments.length + 1, createdAt: now, contentType: recordedBlob.type || 'audio/webm', uploadStatus: 'pending' },
+          fragment: { id: crypto.randomUUID(), position: currentFragments.length + 1, createdAt: now, contentType: recordedBlob.type || 'audio/webm', uploadStatus: 'pending', recognitionStatus },
           blob: recordedBlob,
           url: URL.createObjectURL(recordedBlob),
           transcript: fragmentTranscriptRef.current.trim(),
@@ -290,8 +305,13 @@ export default function Home() {
       recorder.onstop = () => {
         recordedBlob = new Blob(chunksRef.current, { type: recorder.mimeType || 'audio/webm' });
         // Chrome can emit the final SpeechRecognition result after MediaRecorder stops.
-        // Wait briefly for onresult/onend instead of freezing an empty transcript into the fragment.
-        finalizationTimer = window.setTimeout(() => finalizeFragment(true), 1_200);
+        // Do not turn a slow final event into an apparently complete transcript.
+        finalizationTimer = window.setTimeout(() => {
+          recognitionFinished = true;
+          recognitionStatus = 'incomplete';
+          setVoiceMessage('Chrome не подтвердил конец расшифровки в течение 10 секунд. Оригинал сохранён, но этот transcript помечен как неполный: проверь хвост записи вручную.');
+          finalizeFragment();
+        }, 10_000);
         finalizeFragment();
       };
       const SpeechCtor = (window as unknown as { SpeechRecognition?: new () => SpeechRecognitionInstance; webkitSpeechRecognition?: new () => SpeechRecognitionInstance }).SpeechRecognition
@@ -309,12 +329,21 @@ export default function Home() {
           if (text) fragmentTranscriptRef.current = `${fragmentTranscriptRef.current} ${text}`.trim();
         };
         recognition.onerror = (event) => {
-          if (event.error !== 'aborted') setVoiceMessage('Запись продолжается, но Chrome не вернул расшифровку. Оригинал будет сохранён; после записи можно добавить проверенный текст вручную.');
+          if (event.error !== 'aborted') {
+            recognitionStatus = 'incomplete';
+            setVoiceMessage('Запись продолжается, но Chrome не подтвердил расшифровку. Оригинал будет сохранён, а transcript будет помечен как неполный.');
+          }
         };
         recognition.onend = () => {
           if (!recordingStopRequestedRef.current && recorder.state === 'recording') {
             // Chrome may end recognition after a pause; retain one logical fragment while it is recording.
-            window.setTimeout(() => { try { recognition.start(); } catch { /* a concurrent end/start is harmless */ } }, 150);
+            window.setTimeout(() => {
+              try { recognition.start(); }
+              catch {
+                recognitionStatus = 'incomplete';
+                setVoiceMessage('Chrome завершил распознавание раньше записи и не смог продолжить. Оригинал сохранится, а transcript будет помечен как неполный.');
+              }
+            }, 150);
             return;
           }
           recognitionFinished = true;
@@ -325,6 +354,7 @@ export default function Home() {
           recognitionRef.current = recognition;
         } catch {
           recognitionFinished = true;
+          recognitionStatus = 'unavailable';
           setVoiceMessage('Chrome не смог запустить Speech Recognition. Запись продолжится, а оригинал будет сохранён для ручной коррекции или будущего STT-провайдера.');
         }
       } else {
@@ -345,8 +375,8 @@ export default function Home() {
 
   function stopRecording() {
     recordingStopRequestedRef.current = true;
-    recorderRef.current?.stop();
     recognitionRef.current?.stop();
+    recorderRef.current?.stop();
     setRecording(false);
   }
 
@@ -415,29 +445,30 @@ export default function Home() {
     );
   }
 
-  if (view === 'first-choice') return <main className="flow-shell"><AppHeader onHome={() => setView('landing')} hasBook={Boolean(appState.stories.length)} onBook={() => openWorkspace()} /><section className="choice-stage"><p className="eyebrow">Первая страница</p><h1>У тебя уже есть история, которую хочется рассказать?</h1><p className="choice-lead">Можно начать с готового воспоминания — или позволить книге бережно помочь его найти.</p><div className="choice-actions"><button className="button-primary" onClick={() => setView('method')}>Да, хочу рассказать</button><button className="button-secondary" onClick={() => { setMemoryQuestion(0); setView('interview'); }}>Нет, помоги мне вспомнить</button></div><button className="text-button" onClick={() => setView('landing')}>Вернуться на главную</button></section></main>;
+  if (view === 'first-choice') return <main className="flow-shell"><AppHeader onHome={() => setView('landing')} hasBook={Boolean(appState.stories.length)} onBook={() => openWorkspace()} /><section className="choice-stage"><p className="eyebrow">Первая страница</p><h1>У тебя уже есть история, которую хочется рассказать?</h1><p className="choice-lead">Можно начать с готового воспоминания — или позволить книге бережно помочь его найти.</p><div className="choice-actions"><button className="button-primary" onClick={() => { resetStoryFlow(); setView('capture'); }}>Да, хочу рассказать</button><button className="button-secondary" onClick={() => { setMemoryQuestion(0); setView('interview'); }}>Нет, помоги мне вспомнить</button></div><button className="text-button" onClick={() => setView('landing')}>Назад</button></section></main>;
 
-  if (view === 'method') return <main className="flow-shell"><AppHeader onHome={() => setView('landing')} hasBook={Boolean(appState.stories.length)} onBook={() => openWorkspace()} /><section className="choice-stage compact"><p className="eyebrow">Твой способ</p><h1>Как тебе удобнее рассказать?</h1><div className="method-grid"><button onClick={() => { resetStoryFlow('voice'); setView('capture'); }}><Icon>●</Icon><h2>Рассказать голосом</h2><p>Запиши живой рассказ. Если браузер умеет — появится черновая расшифровка.</p></button><button onClick={() => { resetStoryFlow('text'); setView('capture'); }}><Icon>✎</Icon><h2>Написать текстом</h2><p>Начни с любой детали. Порядок и литературность сейчас не важны.</p></button></div><button className="text-button" onClick={() => setView('first-choice')}>Назад</button></section></main>;
+  if (view === 'method') return <main className="flow-shell"><AppHeader onHome={() => setView('landing')} hasBook={Boolean(appState.stories.length)} onBook={() => openWorkspace()} /><section className="choice-stage compact"><p className="eyebrow">Рассказать</p><h1>Голос и текст можно сочетать на одном экране.</h1><button className="button-primary" onClick={() => { resetStoryFlow(); setView('capture'); }}>Продолжить</button><button className="text-button" onClick={() => setView('first-choice')}>Назад</button></section></main>;
 
   if (view === 'capture') {
     const isVoiceAnswer = capturePurpose === 'answer';
     const activeFragments = isVoiceAnswer ? answerCapturedFragments : capturedFragments;
     const hasVoiceText = activeFragments.some((item) => item.transcript.trim());
-    const canContinue = isVoiceAnswer || sourceMode === 'voice' ? hasVoiceText && activeFragments.every((item) => item.fragment.uploadStatus === 'saved') : Boolean(sourceText.trim());
-    const primaryText = sourceMode === 'voice' ? capturedFragments.map((item) => item.transcript.trim()).filter(Boolean).join('\n\n') : sourceText;
+    const canContinue = isVoiceAnswer ? hasVoiceText && activeFragments.every((item) => item.fragment.uploadStatus === 'saved') : Boolean(sourceText.trim() || hasVoiceText) && activeFragments.every((item) => item.fragment.uploadStatus === 'saved');
+    const primaryText = [sourceText.trim(), capturedFragments.map((item) => item.transcript.trim()).filter(Boolean).join('\n\n')].filter(Boolean).join('\n\n');
     const question = nextFollowUpQuestion(primaryText, interviewAnswers);
     const finishVoiceAnswer = () => {
       if (!question || !canContinue) return;
       const answerId = crypto.randomUUID();
       const voiceText = activeFragments.map((item) => item.transcript.trim()).filter(Boolean).join('\n\n');
-      setInterviewAnswers((items) => [...items, { id: answerId, questionId: question.id, question: question.question, answer: voiceText, createdAt: new Date().toISOString(), audioFragmentId: activeFragments[0]?.fragment.id, audioFragmentIds: activeFragments.map((item) => item.fragment.id) }]);
+      const completeText = [voiceText, answer.trim()].filter(Boolean).join('\n\n');
+      setInterviewAnswers((items) => [...items, { id: answerId, questionId: question.id, question: question.question, answer: completeText, createdAt: new Date().toISOString(), audioFragmentId: activeFragments[0]?.fragment.id, audioFragmentIds: activeFragments.map((item) => item.fragment.id) }]);
       setVoiceAnswerDrafts((items) => [...items, { answerId, questionId: question.id, question: question.question, fragments: activeFragments }]);
       setAnswerCapturedFragments([]);
       setCapturePurpose('story');
       setVoiceMessage('Голосовой ответ сохранён как отдельный исходный материал. Можно ответить на следующий вопрос или собрать историю.');
       setView('interview');
     };
-    return <main className="flow-shell"><AppHeader onHome={() => setView('landing')} hasBook={Boolean(appState.stories.length)} onBook={() => openWorkspace()} /><section className="writing-stage"><p className="eyebrow">{isVoiceAnswer ? 'Голосовой ответ' : sourceMode === 'voice' ? 'Живой рассказ' : 'Черновик воспоминания'}</p><h1>{isVoiceAnswer ? question?.question ?? 'Сохрани голосовой ответ' : sourceMode === 'voice' ? 'Рассказывай так, как вспоминается.' : 'Начни с того, что хочется сохранить.'}</h1><p className="writing-lead">{isVoiceAnswer ? 'Этот ответ будет отдельным аудио и расшифровкой, связанными только с этим вопросом.' : 'Не нужно говорить красиво или по порядку. Просто расскажи. Перед сохранением ты увидишь и исправишь весь текст.'}</p>{(sourceMode === 'voice' || isVoiceAnswer) && <div className="recorder"><button className={recording ? 'record-button active' : 'record-button'} onClick={recording ? stopRecording : startRecording}><span />{recording ? 'Остановить запись' : activeFragments.length ? 'Записать дальше' : 'Начать запись'}</button>{recording && <span className="recording-live">Идёт запись</span>}{voiceMessage && <p className="status-message" role="status">{voiceMessage}</p>}<div className="fragment-list" aria-label="Аудиофрагменты и расшифровки">{activeFragments.map((item) => <article key={item.fragment.id} className="fragment-card"><div><b>Аудио {item.fragment.position}</b><span className={`upload-${item.fragment.uploadStatus}`}>{item.fragment.uploadStatus === 'saved' ? 'оригинал сохранён' : item.fragment.uploadStatus === 'failed' ? 'нужно повторить загрузку' : 'сохраняем оригинал…'}</span></div><audio controls src={item.url} aria-label={`Прослушать аудио ${item.fragment.position}`} /><label>Расшифровка {item.fragment.position}<textarea value={item.transcript} onChange={(event) => updateFragmentTranscript(item.fragment.id, event.target.value)} placeholder="Текст появится автоматически. Если Chrome не вернул или обрезал его, добавь проверенную версию вручную." /></label><p className="status-message">Автоматическая расшифровка — черновик: проверь начало, середину и конец записи перед сохранением.</p>{item.fragment.uploadStatus === 'failed' && <button className="button-secondary" onClick={() => void uploadFragment(item, isVoiceAnswer ? 'answer' : 'story')}>Повторить загрузку аудио</button>}</article>)}</div></div>} {sourceMode === 'text' && !isVoiceAnswer && <><label className="editor-label" htmlFor="source-story">Твоя история</label><textarea id="source-story" className="story-textarea" value={sourceText} onChange={(event) => setSourceText(event.target.value)} placeholder="Например: я до сих пор помню тот день…" /><div className="char-note"><span>{sourceText.trim().length ? 'Черновик хранится на этом экране до сохранения' : 'Можно начать с одного предложения'}</span><span>{sourceText.length} знаков</span></div></>}<div className="flow-actions"><button className="button-secondary" onClick={() => isVoiceAnswer ? setView('interview') : setView('method')}>Назад</button>{isVoiceAnswer ? <button className="button-primary" disabled={!canContinue || !question} onClick={finishVoiceAnswer}>Добавить голосовой ответ</button> : <><button className="button-secondary" disabled={!canContinue} onClick={assemble}>Собрать историю сейчас</button><button className="button-primary" disabled={!canContinue} onClick={() => setView('interview')}>Уточняющие вопросы</button></>}</div></section></main>;
+    return <main className="flow-shell"><AppHeader onHome={() => setView('landing')} hasBook={Boolean(appState.stories.length)} onBook={() => openWorkspace()} /><section className="writing-stage"><p className="eyebrow">{isVoiceAnswer ? 'Ответ на уточняющий вопрос' : 'Рассказать'}</p><h1>{isVoiceAnswer ? question?.question ?? 'Сохрани ответ' : 'Расскажи так, как вспоминается.'}</h1><p className="writing-lead">{isVoiceAnswer ? 'Голос и текст равноправны: всё, что ты скажешь или напишешь, останется отдельным материалом этого вопроса.' : 'Можно говорить, писать или сочетать оба способа. Ничего не нужно выбирать заранее.'}</p><div className="recorder"><button className={recording ? 'record-button active' : 'record-button'} onClick={recording ? stopRecording : startRecording}><span />{recording ? 'Остановить запись' : activeFragments.length ? 'Записать дальше' : 'Начать запись'}</button>{recording && <span className="recording-live">Идёт запись</span>}{voiceMessage && <p className="status-message" role="status">{voiceMessage}</p>}<div className="fragment-list" aria-label="Аудиофрагменты и расшифровки">{activeFragments.map((item) => <article key={item.fragment.id} className="fragment-card"><div><b>Аудио {item.fragment.position}</b><span className={`upload-${item.fragment.uploadStatus}`}>{item.fragment.uploadStatus === 'saved' ? 'оригинал сохранён' : item.fragment.uploadStatus === 'failed' ? 'нужно повторить загрузку' : 'сохраняем оригинал…'}</span></div><audio controls src={item.url} aria-label={`Прослушать аудио ${item.fragment.position}`} /><label>Расшифровка {item.fragment.position}<textarea value={item.transcript} onChange={(event) => updateFragmentTranscript(item.fragment.id, event.target.value)} placeholder="Текст появится автоматически. Если Chrome не вернул или обрезал его, добавь проверенную версию вручную." /></label><p className="status-message">Автоматическая расшифровка — черновик: проверь начало, середину и конец записи перед сохранением.</p>{item.fragment.recognitionStatus === 'incomplete' && <p className="error-text">Chrome не подтвердил конец записи: transcript может быть неполным, оригинал сохранён.</p>}{item.fragment.uploadStatus === 'failed' && <button className="button-secondary" onClick={() => void uploadFragment(item, isVoiceAnswer ? 'answer' : 'story')}>Повторить загрузку аудио</button>}</article>)}</div></div>{!isVoiceAnswer && <><label className="editor-label" htmlFor="source-story">Твоя история</label><textarea id="source-story" className="story-textarea" value={sourceText} onChange={(event) => setSourceText(event.target.value)} placeholder="Например: я до сих пор помню тот день…" /><div className="char-note"><span>{sourceText.trim().length ? 'Черновик хранится на этом экране до сохранения' : 'Можно начать с одного предложения'}</span><span>{sourceText.length} знаков</span></div></>}<div className="flow-actions"><button className="button-secondary" onClick={() => isVoiceAnswer ? setView('interview') : setView('first-choice')}>Назад</button>{isVoiceAnswer ? <button className="button-primary" disabled={!canContinue || !question} onClick={finishVoiceAnswer}>Сохранить голосовой ответ</button> : <><button className="button-secondary" disabled={!canContinue} onClick={assemble}>Собрать историю сейчас</button><button className="button-primary" disabled={!canContinue} onClick={() => setView('interview')}>Уточняющие вопросы</button></>}</div></section></main>;
   }
 
   async function setAudioHidden(story: Story, fragmentId: string, hidden: boolean) {
@@ -459,7 +490,7 @@ export default function Home() {
   }
 
   if (view === 'interview') {
-    const primaryText = sourceMode === 'voice' ? capturedFragments.map((item) => item.transcript.trim()).filter(Boolean).join('\n\n') : sourceText;
+    const primaryText = [sourceText.trim(), capturedFragments.map((item) => item.transcript.trim()).filter(Boolean).join('\n\n')].filter(Boolean).join('\n\n');
     const remembering = !primaryText.trim();
     const followUp = nextFollowUpQuestion(primaryText, interviewAnswers);
     const addAnswerAndContinue = () => {
@@ -467,7 +498,7 @@ export default function Home() {
       setInterviewAnswers((items) => [...items, { id: crypto.randomUUID(), questionId: followUp.id, question: followUp.question, answer: answer.trim(), createdAt: new Date().toISOString() }]);
       setAnswer('');
     };
-    return <main className="flow-shell"><AppHeader onHome={() => setView('landing')} hasBook={Boolean(appState.stories.length)} onBook={() => openWorkspace()} /><section className="question-stage"><p className="eyebrow">Один вопрос за раз</p><span className="question-count">{remembering ? `${memoryQuestion + 1} из ${MEMORY_QUESTIONS.length}` : followUp ? `Уточнение ${interviewAnswers.length + 1}` : 'Материал собран'}</span><h1>{remembering ? MEMORY_QUESTIONS[memoryQuestion] : followUp?.question ?? 'Ты уже раскрыл всё, что хотел сохранить?'}</h1>{remembering ? <><p className="choice-lead">Не ищи самый правильный ответ. Выбери то воспоминание, к которому хочется вернуться.</p><div className="choice-actions"><button className="button-primary" onClick={() => { resetStoryFlow('text'); setView('capture'); }}>Рассказать об этом</button><button className="button-secondary" onClick={() => setMemoryQuestion((value) => (value + 1) % MEMORY_QUESTIONS.length)}>Предложи другой вопрос</button></div></> : <><textarea className="answer-textarea" aria-label="Ответ на вопрос" value={answer} onChange={(event) => setAnswer(event.target.value)} placeholder="Ответ можно оставить коротким или сразу собрать историю" /><div className="flow-actions"><button className="button-secondary" disabled={!followUp} onClick={() => { setCapturePurpose('answer'); setAnswerCapturedFragments([]); setVoiceMessage(''); setView('capture'); }}>Ответить голосом</button>{followUp && <button className="button-secondary" disabled={!answer.trim()} onClick={addAnswerAndContinue}>Добавить и следующий вопрос</button>}<button className="button-secondary" onClick={assemble}>Собрать историю сейчас</button><button className="button-primary" onClick={assemble}>{answer.trim() ? 'Добавить ответ и собрать' : 'Собрать историю'}</button></div></>}</section></main>;
+    return <main className="flow-shell"><AppHeader onHome={() => setView('landing')} hasBook={Boolean(appState.stories.length)} onBook={() => openWorkspace()} /><section className="question-stage"><p className="eyebrow">Один вопрос за раз</p><span className="question-count">{remembering ? `${memoryQuestion + 1} из ${MEMORY_QUESTIONS.length}` : followUp ? `Уточнение ${interviewAnswers.length + 1}` : 'Материал собран'}</span><h1>{remembering ? MEMORY_QUESTIONS[memoryQuestion] : followUp?.question ?? 'Ты уже раскрыл всё, что хотел сохранить?'}</h1>{remembering ? <><p className="choice-lead">Не ищи самый правильный ответ. Выбери то воспоминание, к которому хочется вернуться.</p><div className="choice-actions"><button className="button-primary" onClick={() => { resetStoryFlow(); setView('capture'); }}>Рассказать об этом</button><button className="button-secondary" onClick={() => setMemoryQuestion((value) => (value + 1) % MEMORY_QUESTIONS.length)}>Предложи другой вопрос</button></div><button className="text-button" onClick={() => setView('first-choice')}>Назад</button></> : <><div className="answer-composer"><textarea className="answer-textarea" aria-label="Ответ на вопрос" value={answer} onChange={(event) => setAnswer(event.target.value)} placeholder="Можно написать ответ, сказать его голосом или сочетать оба способа" /><button className="record-button compact-record" aria-label="Записать голосовой ответ" title="Записать голосовой ответ" disabled={!followUp} onClick={() => { capturePurposeRef.current = 'answer'; setCapturePurpose('answer'); setAnswerCapturedFragments([]); setVoiceMessage(''); setView('capture'); window.setTimeout(() => void startRecording(), 0); }}><span />Микрофон</button></div><div className="flow-actions"><button className="button-secondary" onClick={() => setView('capture')}>Назад</button>{followUp && <button className="button-secondary" disabled={!answer.trim()} onClick={addAnswerAndContinue}>Ответить на следующий вопрос</button>}<button className="button-primary" onClick={assemble}>Отправить историю в книгу</button></div></>}</section></main>;
   }
 
   if (view === 'draft' && draft) return <main className="flow-shell"><AppHeader onHome={() => setView('landing')} hasBook={Boolean(appState.stories.length)} onBook={() => openWorkspace()} /><section className="review-stage"><div className="review-heading"><div><p className="eyebrow">Проверка перед книгой</p><h1>Проверь: всё ли здесь так, как ты это помнишь?</h1></div><span className="source-badge">Составлено только из твоих слов</span></div><article className="paper-page">{editingDraft ? <textarea className="paper-editor" value={draftText} onChange={(event) => setDraftText(event.target.value)} aria-label="Исправить текст истории" /> : <>{draft.text.split('\n').map((paragraph, index) => <p key={index}>{paragraph || '\u00a0'}</p>)}</>}</article><details className="provenance"><summary>Показать происхождение материала</summary>{draft.sources.map((source) => <p key={source.id}><b>{source.kind === 'typed' ? 'Введено текстом' : source.kind === 'transcript' ? 'Расшифровка / ручной текст записи' : source.kind === 'interview-answer' ? 'Ответ на вопрос' : 'Ручное исправление'}:</b> {source.text}</p>)}</details><div className="flow-actions">{editingDraft ? <><button className="button-secondary" onClick={() => { setDraftText(draft.text); setEditingDraft(false); }}>Отменить</button><button className="button-primary" onClick={saveDraftEdit}>Сохранить исправления</button></> : <><button className="button-secondary" onClick={() => { setDraftText(draft.text); setEditingDraft(true); }}>Нужно исправить</button><button className="button-primary" onClick={confirmDraft}>Всё верно — добавить в книгу</button></>}</div></section></main>;
