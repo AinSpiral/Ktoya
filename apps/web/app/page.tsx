@@ -53,6 +53,8 @@ export default function Home() {
   const [editingStory, setEditingStory] = useState(false);
   const [storyEditText, setStoryEditText] = useState('');
   const [recording, setRecording] = useState(false);
+  const [ttsState, setTtsState] = useState<'idle' | 'playing' | 'paused'>('idle');
+  const [ttsMessage, setTtsMessage] = useState('');
   const [capturedFragments, setCapturedFragments] = useState<CapturedFragment[]>([]);
   const [voiceMessage, setVoiceMessage] = useState('');
   const [registration, setRegistration] = useState({ name: '', email: '' });
@@ -67,6 +69,7 @@ export default function Home() {
   const capturedFragmentsRef = useRef<CapturedFragment[]>([]);
   const captureStoryIdRef = useRef(crypto.randomUUID());
   const recognitionProcessedCountRef = useRef(0);
+  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -118,6 +121,7 @@ export default function Home() {
 
   function openWorkspace(panel: WorkspacePanel = 'book') {
     window.speechSynthesis?.cancel();
+    setTtsState('idle');
     setEditingStory(false);
     setWorkspacePanel(panel);
     setView('workspace');
@@ -268,13 +272,24 @@ export default function Home() {
   }
 
   function speak(text: string) {
-    if (!('speechSynthesis' in window)) return;
+    if (!('speechSynthesis' in window)) { setTtsMessage('Озвучивание недоступно в этом браузере.'); return; }
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = 'ru-RU';
     utterance.rate = 0.92;
+    const russianVoices = window.speechSynthesis.getVoices().filter((voice) => voice.lang.toLowerCase().startsWith('ru'));
+    const preferred = russianVoices.find((voice) => /irina|milena|alena|yandex|google/i.test(voice.name)) ?? russianVoices[0];
+    if (preferred) utterance.voice = preferred;
+    else setTtsMessage('Русский системный голос не найден: для публичного запуска нужен TTS-провайдер.');
+    utterance.onend = () => setTtsState('idle');
+    utterance.onerror = () => { setTtsState('idle'); setTtsMessage('Озвучивание было прервано браузером.'); };
+    utteranceRef.current = utterance;
+    setTtsState('playing');
     window.speechSynthesis.speak(utterance);
   }
+  function pauseSpeech() { window.speechSynthesis?.pause(); setTtsState('paused'); }
+  function resumeSpeech() { window.speechSynthesis?.resume(); setTtsState('playing'); }
+  function stopSpeech() { window.speechSynthesis?.cancel(); utteranceRef.current = null; setTtsState('idle'); }
 
   async function updateStoryText() {
     if (!selectedStory || !storyEditText.trim()) return;
