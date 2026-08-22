@@ -10,6 +10,23 @@ export const MEMORY_QUESTIONS = [
 
 export const FOLLOW_UP_QUESTION = 'Что в этом воспоминании для тебя особенно важно?';
 
+/**
+ * Safe deterministic directions for the no-LLM beta.  They never infer a
+ * biographical fact and each one can be shown only once.
+ */
+export const FOLLOW_UP_SCENARIOS = [
+  { id: 'meaning', question: FOLLOW_UP_QUESTION },
+  { id: 'people', question: 'Кто был рядом в этот момент и что ты помнишь о его участии?' },
+  { id: 'detail', question: 'Какая деталь этого момента особенно осталась в памяти?' },
+  { id: 'change', question: 'Что после этого события изменилось для тебя, если изменилось?' },
+] as const;
+
+export function nextFollowUpQuestion(sourceText: string, answers: InterviewAnswer[]) {
+  if (!sourceText.trim()) return null;
+  const used = new Set(answers.map((answer) => answer.questionId ?? answer.question));
+  return FOLLOW_UP_SCENARIOS.find((scenario) => !used.has(scenario.id) && !used.has(scenario.question)) ?? null;
+}
+
 export function assembleStory(sourceText: string, answers: InterviewAnswer[]): string {
   const fragments = [sourceText, ...answers.map((item) => item.answer)]
     .map((item) => item.trim())
@@ -41,6 +58,7 @@ export function makeStory(input: {
       kind: 'interview-answer' as const,
       text: item.answer.trim(),
       createdAt: now,
+      questionId: item.questionId,
     })),
   ];
   return {
@@ -71,6 +89,7 @@ export function appendTranscriptRevision(story: Story, input: {
   audioFragmentId: string;
   text: string;
   provider: TranscriptRevision['provider'];
+  verificationStatus?: TranscriptRevision['verificationStatus'];
 }): Story {
   const now = new Date().toISOString();
   const previous = story.transcriptRevisions ?? [];
@@ -81,6 +100,7 @@ export function appendTranscriptRevision(story: Story, input: {
     provider: input.provider,
     createdAt: now,
     selected: true,
+    verificationStatus: input.verificationStatus ?? (input.provider === 'manual' ? 'confirmed' : 'unverified'),
   };
   const transcriptRevisions = [
     ...previous.map((item) => item.audioFragmentId === input.audioFragmentId ? { ...item, selected: false } : item),

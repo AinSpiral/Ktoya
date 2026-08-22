@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { HeaderAuthAdapter, HttpStorageAdapter, StorageConflictError, browserExportAdapter } from '@/lib/adapters';
 import { createEmptyState, normalizeAppState, type AppState, type AudioFragment, type FeedbackEntry, type InterviewAnswer, type PrivacyLevel, type Story, type StoryStyle } from '@/lib/domain';
-import { FOLLOW_UP_QUESTION, MEMORY_QUESTIONS, appendTranscriptRevision, makeStory, markAudioDeleted, startTrial } from '@/lib/story-logic';
+import { FOLLOW_UP_QUESTION, MEMORY_QUESTIONS, appendTranscriptRevision, makeStory, markAudioDeleted, nextFollowUpQuestion, startTrial } from '@/lib/story-logic';
 
 type View = 'landing' | 'first-choice' | 'method' | 'capture' | 'interview' | 'draft' | 'register' | 'workspace';
 type WorkspacePanel = 'book' | 'read' | 'settings' | 'privacy' | 'export' | 'balance' | 'feedback' | 'roadmap';
@@ -43,6 +43,7 @@ export default function Home() {
   const [sourceText, setSourceText] = useState('');
   const [memoryQuestion, setMemoryQuestion] = useState(0);
   const [answer, setAnswer] = useState('');
+  const [interviewAnswers, setInterviewAnswers] = useState<InterviewAnswer[]>([]);
   const [answerViaVoice, setAnswerViaVoice] = useState(false);
   const [draft, setDraft] = useState<Story | null>(null);
   const [editingDraft, setEditingDraft] = useState(false);
@@ -105,6 +106,7 @@ export default function Home() {
     setSourceMode(mode);
     setSourceText('');
     setAnswer('');
+    setInterviewAnswers([]);
     setAnswerViaVoice(false);
     setDraft(null);
     setDraftText('');
@@ -125,9 +127,12 @@ export default function Home() {
     const voiceText = capturedFragments.map((item) => item.transcript.trim()).filter(Boolean).join('\n\n');
     const primaryText = answerViaVoice ? sourceText : sourceMode === 'voice' ? voiceText : sourceText;
     if (!primaryText.trim()) return;
-    const answers: InterviewAnswer[] = answerViaVoice
-      ? [{ id: crypto.randomUUID(), question: FOLLOW_UP_QUESTION, answer: voiceText.trim() }]
-      : answer.trim() ? [{ id: crypto.randomUUID(), question: FOLLOW_UP_QUESTION, answer: answer.trim() }] : [];
+    const currentQuestion = nextFollowUpQuestion(sourceText, interviewAnswers);
+    const answers: InterviewAnswer[] = [
+      ...interviewAnswers,
+      ...(answerViaVoice && voiceText.trim() ? [{ id: crypto.randomUUID(), questionId: currentQuestion?.id, question: currentQuestion?.question ?? FOLLOW_UP_QUESTION, answer: voiceText.trim() }] : []),
+      ...(!answerViaVoice && answer.trim() ? [{ id: crypto.randomUUID(), questionId: currentQuestion?.id, question: currentQuestion?.question ?? FOLLOW_UP_QUESTION, answer: answer.trim() }] : []),
+    ];
     const generated = makeStory({ sourceText: primaryText, sourceMode: answerViaVoice ? 'text' : sourceMode, answers, transcriptProvider: sourceMode === 'voice' ? 'manual' : undefined });
     const base = sourceMode === 'voice' ? { ...generated, id: captureStoryIdRef.current } : generated;
     const now = new Date().toISOString();
@@ -338,7 +343,13 @@ export default function Home() {
 
   if (view === 'interview') {
     const remembering = !sourceText.trim();
-    return <main className="flow-shell"><AppHeader onHome={() => setView('landing')} hasBook={Boolean(appState.stories.length)} onBook={() => openWorkspace()} /><section className="question-stage"><p className="eyebrow">Один вопрос за раз</p><span className="question-count">{remembering ? `${memoryQuestion + 1} из ${MEMORY_QUESTIONS.length}` : 'Необязательный вопрос'}</span><h1>{remembering ? MEMORY_QUESTIONS[memoryQuestion] : FOLLOW_UP_QUESTION}</h1>{remembering ? <><p className="choice-lead">Не ищи самый правильный ответ. Выбери то воспоминание, к которому хочется вернуться.</p><div className="choice-actions"><button className="button-primary" onClick={() => { resetStoryFlow('text'); setView('capture'); }}>Рассказать об этом</button><button className="button-secondary" onClick={() => setMemoryQuestion((value) => (value + 1) % MEMORY_QUESTIONS.length)}>Предложи другой вопрос</button></div></> : <><textarea className="answer-textarea" aria-label="Ответ на вопрос" value={answer} onChange={(event) => setAnswer(event.target.value)} placeholder="Ответ можно оставить коротким или пропустить" /><div className="flow-actions"><button className="button-secondary" onClick={() => { setAnswerViaVoice(true); setSourceMode('voice'); setCapturedFragments([]); setView('capture'); }}>Ответить голосом</button><button className="button-secondary" onClick={assemble}>Пропустить и собрать</button><button className="button-primary" onClick={assemble}>{answer.trim() ? 'Добавить ответ и собрать' : 'Собрать историю'}</button></div></>}</section></main>;
+    const followUp = nextFollowUpQuestion(sourceText, interviewAnswers);
+    const addAnswerAndContinue = () => {
+      if (!answer.trim() || !followUp) return;
+      setInterviewAnswers((items) => [...items, { id: crypto.randomUUID(), questionId: followUp.id, question: followUp.question, answer: answer.trim(), createdAt: new Date().toISOString() }]);
+      setAnswer('');
+    };
+    return <main className="flow-shell"><AppHeader onHome={() => setView('landing')} hasBook={Boolean(appState.stories.length)} onBook={() => openWorkspace()} /><section className="question-stage"><p className="eyebrow">Один вопрос за раз</p><span className="question-count">{remembering ? `${memoryQuestion + 1} из ${MEMORY_QUESTIONS.length}` : followUp ? `Уточнение ${interviewAnswers.length + 1}` : 'Материал собран'}</span><h1>{remembering ? MEMORY_QUESTIONS[memoryQuestion] : followUp?.question ?? 'Ты уже раскрыл всё, что хотел сохранить?'}</h1>{remembering ? <><p className="choice-lead">Не ищи самый правильный ответ. Выбери то воспоминание, к которому хочется вернуться.</p><div className="choice-actions"><button className="button-primary" onClick={() => { resetStoryFlow('text'); setView('capture'); }}>Рассказать об этом</button><button className="button-secondary" onClick={() => setMemoryQuestion((value) => (value + 1) % MEMORY_QUESTIONS.length)}>Предложи другой вопрос</button></div></> : <><textarea className="answer-textarea" aria-label="Ответ на вопрос" value={answer} onChange={(event) => setAnswer(event.target.value)} placeholder="Ответ можно оставить коротким или сразу собрать историю" /><div className="flow-actions"><button className="button-secondary" onClick={() => { setAnswerViaVoice(true); setSourceMode('voice'); setCapturedFragments([]); setView('capture'); }}>Ответить голосом</button>{followUp && <button className="button-secondary" disabled={!answer.trim()} onClick={addAnswerAndContinue}>Добавить и следующий вопрос</button>}<button className="button-secondary" onClick={assemble}>Собрать историю сейчас</button><button className="button-primary" onClick={assemble}>{answer.trim() ? 'Добавить ответ и собрать' : 'Собрать историю'}</button></div></>}</section></main>;
   }
 
   if (view === 'draft' && draft) return <main className="flow-shell"><AppHeader onHome={() => setView('landing')} hasBook={Boolean(appState.stories.length)} onBook={() => openWorkspace()} /><section className="review-stage"><div className="review-heading"><div><p className="eyebrow">Проверка перед книгой</p><h1>Проверь: всё ли здесь так, как ты это помнишь?</h1></div><span className="source-badge">Составлено только из твоих слов</span></div><article className="paper-page">{editingDraft ? <textarea className="paper-editor" value={draftText} onChange={(event) => setDraftText(event.target.value)} aria-label="Исправить текст истории" /> : <>{draft.text.split('\n').map((paragraph, index) => <p key={index}>{paragraph || '\u00a0'}</p>)}</>}</article><details className="provenance"><summary>Показать происхождение материала</summary>{draft.sources.map((source) => <p key={source.id}><b>{source.kind === 'typed' ? 'Введено текстом' : source.kind === 'transcript' ? 'Расшифровка / ручной текст записи' : source.kind === 'interview-answer' ? 'Ответ на вопрос' : 'Ручное исправление'}:</b> {source.text}</p>)}</details><div className="flow-actions">{editingDraft ? <><button className="button-secondary" onClick={() => { setDraftText(draft.text); setEditingDraft(false); }}>Отменить</button><button className="button-primary" onClick={saveDraftEdit}>Сохранить исправления</button></> : <><button className="button-secondary" onClick={() => { setDraftText(draft.text); setEditingDraft(true); }}>Нужно исправить</button><button className="button-primary" onClick={confirmDraft}>Всё верно — добавить в книгу</button></>}</div></section></main>;

@@ -11,6 +11,8 @@ export interface StorySource {
   /** Links a readable source to the immutable media it came from, when applicable. */
   audioFragmentId?: string;
   transcriptRevisionId?: string;
+  /** Identifies the precise interview question that produced this source. */
+  questionId?: string;
 }
 
 export interface Transcript {
@@ -42,10 +44,13 @@ export interface TranscriptRevision {
   provider: 'browser-speech-recognition' | 'manual';
   createdAt: string;
   selected: boolean;
+  /** Browser recognition is a draft until the Author explicitly checks it. */
+  verificationStatus?: 'unverified' | 'confirmed';
 }
 
 export interface InterviewAnswer {
   id: string;
+  questionId?: string;
   question: string;
   answer: string;
   createdAt?: string;

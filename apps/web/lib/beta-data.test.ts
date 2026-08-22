@@ -36,7 +36,7 @@ describe('safe beta data model', () => {
       ...state,
       version: 2,
       stories: [{ ...makeStory({ sourceText: 'Старая расшифровка.', sourceMode: 'voice', answers: [] }), audioKey: 'owner/story.webm' }],
-    } as Parameters<typeof migrateLegacyState>[0];
+    } as unknown as Parameters<typeof migrateLegacyState>[0];
     const result = migrateLegacyState(legacy);
     expect(result.state.stories).toHaveLength(1);
     expect(result.state.stories[0].audioFragments?.[0].objectKey).toBe('owner/story.webm');
