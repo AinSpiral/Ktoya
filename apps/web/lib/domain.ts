@@ -8,6 +8,9 @@ export interface StorySource {
   kind: StorySourceKind;
   text: string;
   createdAt: string;
+  /** Links a readable source to the immutable media it came from, when applicable. */
+  audioFragmentId?: string;
+  transcriptRevisionId?: string;
 }
 
 export interface Transcript {
@@ -16,10 +19,38 @@ export interface Transcript {
   confirmed: boolean;
 }
 
+/**
+ * The original recording is an independent object.  A failed upload stays
+ * visible to the author instead of being treated as a successfully saved file.
+ */
+export interface AudioFragment {
+  id: string;
+  position: number;
+  createdAt: string;
+  contentType: string;
+  uploadStatus: 'pending' | 'saved' | 'failed' | 'deleted';
+  objectKey?: string;
+  uploadedAt?: string;
+  deletedAt?: string;
+}
+
+/** A recognition attempt is append-only; one revision can be selected for reading. */
+export interface TranscriptRevision {
+  id: string;
+  audioFragmentId: string;
+  text: string;
+  provider: 'browser-speech-recognition' | 'manual';
+  createdAt: string;
+  selected: boolean;
+}
+
 export interface InterviewAnswer {
   id: string;
   question: string;
   answer: string;
+  createdAt?: string;
+  audioFragmentId?: string;
+  transcriptRevisionId?: string;
 }
 
 export interface Revision {
@@ -42,6 +73,12 @@ export interface Story {
   createdAt: string;
   updatedAt: string;
   confirmedAt: string;
+  /** Optimistic-concurrency version maintained by the server. */
+  recordVersion?: number;
+  audioFragments?: AudioFragment[];
+  transcriptRevisions?: TranscriptRevision[];
+  status?: 'draft' | 'confirmed';
+  /** Kept only so a legacy record can be migrated without guessing data. */
   audioKey?: string;
 }
 
@@ -89,7 +126,7 @@ export interface AIBalance {
 }
 
 export interface AppState {
-  version: 2;
+  version: 3;
   author: Author | null;
   book: Book;
   chapters: Chapter[];
@@ -100,6 +137,8 @@ export interface AppState {
   subscription: SubscriptionState;
   aiBalance: AIBalance;
   updatedAt: string;
+  /** Version of book-level settings; stories have their own recordVersion. */
+  stateVersion?: number;
 }
 
 export interface FeedbackEntry {
@@ -121,7 +160,7 @@ export function createEmptyState(): AppState {
     updatedAt: now,
   };
   return {
-    version: 2,
+    version: 3,
     author: null,
     book: { id: crypto.randomUUID(), title: 'Моя Книга жизни', storyIds: [], chapterIds: [chapter.id], createdAt: now, updatedAt: now },
     chapters: [chapter],
@@ -136,8 +175,8 @@ export function createEmptyState(): AppState {
 }
 
 export function normalizeAppState(state: AppState): AppState {
-  const legacy = state as AppState & { version: 1 | 2; chapters?: Chapter[]; book: Book & { chapterIds?: string[] } };
-  if (legacy.version === 2 && legacy.chapters?.length && legacy.book.chapterIds?.length) return state;
+  const legacy = state as AppState & { version: 1 | 2 | 3; chapters?: Chapter[]; book: Book & { chapterIds?: string[] } };
+  if (legacy.version === 3 && legacy.chapters?.length && legacy.book.chapterIds?.length) return state;
 
   const now = new Date().toISOString();
   const chapter: Chapter = {
@@ -151,7 +190,7 @@ export function normalizeAppState(state: AppState): AppState {
   };
   return {
     ...state,
-    version: 2,
+    version: 3,
     book: { ...legacy.book, chapterIds: [chapter.id] },
     chapters: [chapter],
   };

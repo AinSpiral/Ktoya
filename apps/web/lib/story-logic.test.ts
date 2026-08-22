@@ -53,7 +53,7 @@ describe('book structure compatibility', () => {
       chapters: undefined,
     } as unknown as Parameters<typeof normalizeAppState>[0];
     const normalized = normalizeAppState(legacy);
-    expect(normalized.version).toBe(2);
+    expect(normalized.version).toBe(3);
     expect(normalized.chapters[0].storyIds).toEqual(['story-1']);
     expect(normalized.book.chapterIds).toEqual([normalized.chapters[0].id]);
   });

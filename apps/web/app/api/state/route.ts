@@ -1,30 +1,27 @@
 import { env } from 'cloudflare:workers';
 import { NextRequest, NextResponse } from 'next/server';
 import type { AppState } from '@/lib/domain';
-
-const TABLE = `CREATE TABLE IF NOT EXISTS app_state (
-  user_id TEXT PRIMARY KEY,
-  state_json TEXT NOT NULL,
-  updated_at TEXT NOT NULL
-)`;
-
-function userId(request: NextRequest) {
-  return request.headers.get('oai-authenticated-user-id') ?? request.headers.get('oai-authenticated-user-email') ?? 'local-sites-user';
-}
+import { loadAuthorState, saveAuthorState, StateConflictError } from '@/lib/server-state';
+import { authenticatedUserId } from '@/lib/server-auth';
 
 export async function GET(request: NextRequest) {
-  await env.DB.prepare(TABLE).run();
-  const row = await env.DB.prepare('SELECT state_json FROM app_state WHERE user_id = ?').bind(userId(request)).first<{ state_json: string }>();
-  if (!row) return new NextResponse(null, { status: 404 });
-  return NextResponse.json(JSON.parse(row.state_json));
+  const currentUser = authenticatedUserId(request.headers, request.nextUrl.hostname === 'localhost' || request.nextUrl.hostname === '127.0.0.1');
+  if (!currentUser) return NextResponse.json({ error: 'authentication_required' }, { status: 401 });
+  const state = await loadAuthorState(env.DB, currentUser);
+  if (!state) return new NextResponse(null, { status: 404 });
+  return NextResponse.json(state);
 }
 
 export async function PUT(request: NextRequest) {
+  const currentUser = authenticatedUserId(request.headers, request.nextUrl.hostname === 'localhost' || request.nextUrl.hostname === '127.0.0.1');
+  if (!currentUser) return NextResponse.json({ error: 'authentication_required' }, { status: 401 });
   const body = await request.json() as AppState;
-  const updatedAt = new Date().toISOString();
-  await env.DB.prepare(TABLE).run();
-  await env.DB.prepare(`INSERT INTO app_state (user_id, state_json, updated_at) VALUES (?, ?, ?)
-    ON CONFLICT(user_id) DO UPDATE SET state_json = excluded.state_json, updated_at = excluded.updated_at`)
-    .bind(userId(request), JSON.stringify({ ...body, updatedAt }), updatedAt).run();
-  return NextResponse.json({ ok: true, updatedAt });
+  try {
+    return NextResponse.json(await saveAuthorState(env.DB, currentUser, body));
+  } catch (error) {
+    if (error instanceof StateConflictError) {
+      return NextResponse.json({ error: 'conflict', message: 'Эта история изменилась в другой вкладке. Обнови книгу и сохрани свою версию отдельно.' }, { status: 409 });
+    }
+    throw error;
+  }
 }

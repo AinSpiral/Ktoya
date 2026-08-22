@@ -1,4 +1,4 @@
-import type { AppState, InterviewAnswer, Story, StorySource } from './domain';
+import type { AppState, AudioFragment, InterviewAnswer, Story, StorySource, TranscriptRevision } from './domain';
 
 export const MEMORY_QUESTIONS = [
   'Какое событие вспоминается тебе особенно тепло?',
@@ -60,7 +60,63 @@ export function makeStory(input: {
     createdAt: now,
     updatedAt: now,
     confirmedAt: now,
+    recordVersion: 0,
+    audioFragments: [],
+    transcriptRevisions: [],
+    status: 'confirmed',
   };
+}
+
+export function appendTranscriptRevision(story: Story, input: {
+  audioFragmentId: string;
+  text: string;
+  provider: TranscriptRevision['provider'];
+}): Story {
+  const now = new Date().toISOString();
+  const previous = story.transcriptRevisions ?? [];
+  const revision: TranscriptRevision = {
+    id: crypto.randomUUID(),
+    audioFragmentId: input.audioFragmentId,
+    text: input.text.trim(),
+    provider: input.provider,
+    createdAt: now,
+    selected: true,
+  };
+  const transcriptRevisions = [
+    ...previous.map((item) => item.audioFragmentId === input.audioFragmentId ? { ...item, selected: false } : item),
+    revision,
+  ];
+  const sources: StorySource[] = [
+    ...story.sources,
+    { id: crypto.randomUUID(), kind: 'transcript', text: revision.text, createdAt: now, audioFragmentId: input.audioFragmentId, transcriptRevisionId: revision.id },
+  ];
+  return { ...story, transcriptRevisions, sources, updatedAt: now };
+}
+
+export function markAudioUpload(story: Story, fragmentId: string, patch: Partial<AudioFragment>): Story {
+  return {
+    ...story,
+    audioFragments: (story.audioFragments ?? []).map((fragment) => fragment.id === fragmentId ? { ...fragment, ...patch } : fragment),
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+/** Deleting an original never deletes its transcript or any composed text. */
+export function markAudioDeleted(story: Story, fragmentId: string): Story {
+  return markAudioUpload(story, fragmentId, { uploadStatus: 'deleted', deletedAt: new Date().toISOString() });
+}
+
+export function selectedTranscriptText(story: Story): string {
+  return (story.transcriptRevisions ?? [])
+    .filter((revision) => revision.selected)
+    .sort((a, b) => {
+      const left = story.audioFragments?.find((fragment) => fragment.id === a.audioFragmentId)?.position ?? 0;
+      const right = story.audioFragments?.find((fragment) => fragment.id === b.audioFragmentId)?.position ?? 0;
+      return left - right;
+    })
+    .map((revision) => revision.text.trim())
+    .filter(Boolean)
+    .join('\n\n');
 }
 
 export function startTrial(state: AppState): AppState {

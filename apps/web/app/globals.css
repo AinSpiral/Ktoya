@@ -218,6 +218,17 @@ button:disabled { cursor: not-allowed; opacity: .42; transform: none !important;
 .feedback-types button.active { color: white; background: var(--pine); }
 .feedback-page textarea { min-height: 220px; }
 .feedback-page > .button-primary { margin-top: 18px; }
+.fragment-list { display: grid; gap: 16px; margin-top: 20px; }
+.fragment-card, .story-materials article { display: grid; gap: 10px; padding: 18px; border: 1px solid var(--line); border-radius: 16px; background: rgba(255,255,255,.58); }
+.fragment-card > div { display: flex; align-items: baseline; gap: 12px; justify-content: space-between; }
+.fragment-card audio, .story-materials audio { width: 100%; }
+.fragment-card textarea { min-height: 110px; width: 100%; margin-top: 7px; }
+.upload-saved { color: var(--pine); }
+.upload-failed { color: #a83c32; }
+.upload-pending { color: #866b39; }
+.story-materials { margin-top: 22px; }
+.story-materials article + article { margin-top: 12px; }
+.story-materials .text-button { width: fit-content; }
 .roadmap-vertical { margin-top: 55px; border-left: 1px solid var(--line); }
 .roadmap-vertical article { position: relative; padding: 5px 0 35px 45px; }
 .roadmap-vertical article::before { content: ''; position: absolute; left: -6px; top: 8px; width: 11px; height: 11px; border-radius: 50%; background: #a7b7aa; }

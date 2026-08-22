@@ -19,10 +19,12 @@ export interface TTSProvider {
 
 export interface StorageAdapter {
   load(): Promise<AppState | null>;
-  save(state: AppState): Promise<void>;
+  save(state: AppState): Promise<AppState>;
   saveFeedback(entry: FeedbackEntry): Promise<void>;
-  saveAudio(storyId: string, blob: Blob): Promise<string>;
+  saveAudio(storyId: string, fragmentId: string, blob: Blob): Promise<string>;
 }
+
+export class StorageConflictError extends Error {}
 
 export interface AuthAdapter {
   currentUser(): Promise<{ id: string; email: string; name: string } | null>;
@@ -39,22 +41,29 @@ export interface ExportAdapter {
 }
 
 export class HttpStorageAdapter implements StorageAdapter {
+  private headers(contentType?: string) {
+    const headers: Record<string, string> = contentType ? { 'content-type': contentType } : {};
+    if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) headers['x-ktoya-dev-user'] = 'local-development-author';
+    return headers;
+  }
   async load() {
-    const response = await fetch('/api/state', { cache: 'no-store' });
+    const response = await fetch('/api/state', { cache: 'no-store', headers: this.headers() });
     if (response.status === 404) return null;
     if (!response.ok) throw new Error('Не удалось загрузить книгу');
     return response.json() as Promise<AppState>;
   }
   async save(state: AppState) {
-    const response = await fetch('/api/state', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(state) });
+    const response = await fetch('/api/state', { method: 'PUT', headers: this.headers('application/json'), body: JSON.stringify(state) });
+    if (response.status === 409) throw new StorageConflictError('Книга изменилась в другой вкладке');
     if (!response.ok) throw new Error('Не удалось сохранить книгу');
+    return response.json() as Promise<AppState>;
   }
   async saveFeedback(entry: FeedbackEntry) {
-    const response = await fetch('/api/feedback', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(entry) });
+    const response = await fetch('/api/feedback', { method: 'POST', headers: this.headers('application/json'), body: JSON.stringify(entry) });
     if (!response.ok) throw new Error('Не удалось сохранить обратную связь');
   }
-  async saveAudio(storyId: string, blob: Blob) {
-    const response = await fetch(`/api/media?story=${encodeURIComponent(storyId)}`, { method: 'PUT', headers: { 'content-type': blob.type || 'audio/webm' }, body: blob });
+  async saveAudio(storyId: string, fragmentId: string, blob: Blob) {
+    const response = await fetch(`/api/media?story=${encodeURIComponent(storyId)}&fragment=${encodeURIComponent(fragmentId)}`, { method: 'PUT', headers: this.headers(blob.type || 'audio/webm'), body: blob });
     if (!response.ok) throw new Error('Не удалось сохранить запись');
     const result = await response.json() as { key: string };
     return result.key;

@@ -1,9 +1,9 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { HeaderAuthAdapter, HttpStorageAdapter, browserExportAdapter } from '@/lib/adapters';
-import { createEmptyState, normalizeAppState, type AppState, type FeedbackEntry, type InterviewAnswer, type PrivacyLevel, type Story, type StoryStyle } from '@/lib/domain';
-import { FOLLOW_UP_QUESTION, MEMORY_QUESTIONS, makeStory, startTrial } from '@/lib/story-logic';
+import { HeaderAuthAdapter, HttpStorageAdapter, StorageConflictError, browserExportAdapter } from '@/lib/adapters';
+import { createEmptyState, normalizeAppState, type AppState, type AudioFragment, type FeedbackEntry, type InterviewAnswer, type PrivacyLevel, type Story, type StoryStyle } from '@/lib/domain';
+import { FOLLOW_UP_QUESTION, MEMORY_QUESTIONS, appendTranscriptRevision, makeStory, markAudioDeleted, startTrial } from '@/lib/story-logic';
 
 type View = 'landing' | 'first-choice' | 'method' | 'capture' | 'interview' | 'draft' | 'register' | 'workspace';
 type WorkspacePanel = 'book' | 'read' | 'settings' | 'privacy' | 'export' | 'balance' | 'feedback' | 'roadmap';
@@ -16,6 +16,7 @@ type SpeechRecognitionInstance = {
   onresult: ((event: { results: ArrayLike<{ 0: { transcript: string }; isFinal: boolean }> }) => void) | null;
   onerror: ((event: { error: string }) => void) | null;
 };
+type CapturedFragment = { fragment: AudioFragment; blob: Blob; url: string; transcript: string };
 
 const storage = new HttpStorageAdapter();
 const auth = new HeaderAuthAdapter();
@@ -42,6 +43,7 @@ export default function Home() {
   const [sourceText, setSourceText] = useState('');
   const [memoryQuestion, setMemoryQuestion] = useState(0);
   const [answer, setAnswer] = useState('');
+  const [answerViaVoice, setAnswerViaVoice] = useState(false);
   const [draft, setDraft] = useState<Story | null>(null);
   const [editingDraft, setEditingDraft] = useState(false);
   const [draftText, setDraftText] = useState('');
@@ -50,8 +52,7 @@ export default function Home() {
   const [editingStory, setEditingStory] = useState(false);
   const [storyEditText, setStoryEditText] = useState('');
   const [recording, setRecording] = useState(false);
-  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
-  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [capturedFragments, setCapturedFragments] = useState<CapturedFragment[]>([]);
   const [voiceMessage, setVoiceMessage] = useState('');
   const [registration, setRegistration] = useState({ name: '', email: '' });
   const [feedbackType, setFeedbackType] = useState<FeedbackEntry['type']>('idea');
@@ -61,6 +62,10 @@ export default function Home() {
   const recorderRef = useRef<MediaRecorder | null>(null);
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const fragmentTranscriptRef = useRef('');
+  const capturedFragmentsRef = useRef<CapturedFragment[]>([]);
+  const captureStoryIdRef = useRef(crypto.randomUUID());
+  const recognitionProcessedCountRef = useRef(0);
 
   useEffect(() => {
     let active = true;
@@ -79,7 +84,8 @@ export default function Home() {
     return () => { active = false; };
   }, []);
 
-  useEffect(() => () => { if (audioUrl) URL.revokeObjectURL(audioUrl); }, [audioUrl]);
+  useEffect(() => { capturedFragmentsRef.current = capturedFragments; }, [capturedFragments]);
+  useEffect(() => () => { capturedFragmentsRef.current.forEach((item) => URL.revokeObjectURL(item.url)); }, []);
 
   const selectedStory = useMemo(() => appState.stories.find((story) => story.id === selectedStoryId) ?? appState.stories[0] ?? null, [appState.stories, selectedStoryId]);
 
@@ -87,10 +93,11 @@ export default function Home() {
     setAppState(next);
     setSaveStatus('saving');
     try {
-      await storage.save(next);
+      setAppState(await storage.save(next));
       setSaveStatus('saved');
-    } catch {
+    } catch (error) {
       setSaveStatus('error');
+      if (error instanceof StorageConflictError) setVoiceMessage('Книга изменилась в другой вкладке. Ничего не удалено: обнови страницу и сохрани эту версию отдельно.');
     }
   }
 
@@ -98,11 +105,12 @@ export default function Home() {
     setSourceMode(mode);
     setSourceText('');
     setAnswer('');
+    setAnswerViaVoice(false);
     setDraft(null);
     setDraftText('');
-    setAudioBlob(null);
-    if (audioUrl) URL.revokeObjectURL(audioUrl);
-    setAudioUrl(null);
+    captureStoryIdRef.current = crypto.randomUUID();
+    capturedFragments.forEach((item) => URL.revokeObjectURL(item.url));
+    setCapturedFragments([]);
     setVoiceMessage('');
   }
 
@@ -114,9 +122,26 @@ export default function Home() {
   }
 
   function assemble() {
-    if (!sourceText.trim()) return;
-    const answers: InterviewAnswer[] = answer.trim() ? [{ id: crypto.randomUUID(), question: FOLLOW_UP_QUESTION, answer: answer.trim() }] : [];
-    const nextDraft = makeStory({ sourceText, sourceMode, answers, transcriptProvider: sourceMode === 'voice' ? 'manual' : undefined });
+    const voiceText = capturedFragments.map((item) => item.transcript.trim()).filter(Boolean).join('\n\n');
+    const primaryText = answerViaVoice ? sourceText : sourceMode === 'voice' ? voiceText : sourceText;
+    if (!primaryText.trim()) return;
+    const answers: InterviewAnswer[] = answerViaVoice
+      ? [{ id: crypto.randomUUID(), question: FOLLOW_UP_QUESTION, answer: voiceText.trim() }]
+      : answer.trim() ? [{ id: crypto.randomUUID(), question: FOLLOW_UP_QUESTION, answer: answer.trim() }] : [];
+    const generated = makeStory({ sourceText: primaryText, sourceMode: answerViaVoice ? 'text' : sourceMode, answers, transcriptProvider: sourceMode === 'voice' ? 'manual' : undefined });
+    const base = sourceMode === 'voice' ? { ...generated, id: captureStoryIdRef.current } : generated;
+    const now = new Date().toISOString();
+    const nextDraft = sourceMode === 'voice' ? {
+      ...base,
+      audioFragments: capturedFragments.map((item) => item.fragment),
+      transcriptRevisions: capturedFragments.filter((item) => item.transcript.trim()).map((item) => ({
+        id: crypto.randomUUID(), audioFragmentId: item.fragment.id, text: item.transcript.trim(), provider: 'browser-speech-recognition' as const, createdAt: now, selected: true,
+      })),
+      sources: [
+        ...capturedFragments.filter((item) => item.transcript.trim()).map((item) => ({ id: crypto.randomUUID(), kind: 'transcript' as const, text: item.transcript.trim(), createdAt: now, audioFragmentId: item.fragment.id })),
+        ...base.sources.filter((item) => item.kind === 'interview-answer').map((item) => answerViaVoice ? { ...item, audioFragmentId: capturedFragments[0]?.fragment.id } : item),
+      ],
+    } : base;
     setDraft(nextDraft);
     setDraftText(nextDraft.text);
     setEditingDraft(false);
@@ -132,11 +157,7 @@ export default function Home() {
 
   async function addStoryAndContinue(author?: { name: string; email: string }) {
     if (!draft) return;
-    let story = draft;
-    if (audioBlob) {
-      try { story = { ...story, audioKey: await storage.saveAudio(story.id, audioBlob) }; }
-      catch { setVoiceMessage('История сохранена, но аудиозапись загрузить не удалось.'); }
-    }
+    const story = draft;
     const now = new Date().toISOString();
     const primaryChapter = appState.chapters[0];
     let next: AppState = {
@@ -162,6 +183,25 @@ export default function Home() {
     else void addStoryAndContinue();
   }
 
+  function updateFragmentTranscript(fragmentId: string, transcript: string) {
+    setCapturedFragments((items) => items.map((item) => item.fragment.id === fragmentId ? { ...item, transcript } : item));
+  }
+
+  async function uploadFragment(item: CapturedFragment) {
+    try {
+      const objectKey = await storage.saveAudio(captureStoryIdRef.current, item.fragment.id, item.blob);
+      setCapturedFragments((items) => items.map((current) => current.fragment.id === item.fragment.id ? {
+        ...current, fragment: { ...current.fragment, uploadStatus: 'saved', objectKey, uploadedAt: new Date().toISOString() },
+      } : current));
+      setVoiceMessage(`Аудио ${item.fragment.position} сохранено. Его исходный файл останется рядом с расшифровкой.`);
+    } catch {
+      setCapturedFragments((items) => items.map((current) => current.fragment.id === item.fragment.id ? {
+        ...current, fragment: { ...current.fragment, uploadStatus: 'failed' },
+      } : current));
+      setVoiceMessage(`Аудио ${item.fragment.position} не сохранено на сервере. Исходный файл оставлен здесь: повтори загрузку.`);
+    }
+  }
+
   async function startRecording() {
     setVoiceMessage('');
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
@@ -171,13 +211,22 @@ export default function Home() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       chunksRef.current = [];
+      fragmentTranscriptRef.current = '';
+      recognitionProcessedCountRef.current = 0;
       const recorder = new MediaRecorder(stream);
       recorderRef.current = recorder;
       recorder.ondataavailable = (event) => { if (event.data.size) chunksRef.current.push(event.data); };
       recorder.onstop = () => {
         const blob = new Blob(chunksRef.current, { type: recorder.mimeType || 'audio/webm' });
-        setAudioBlob(blob);
-        setAudioUrl(URL.createObjectURL(blob));
+        const now = new Date().toISOString();
+        const item: CapturedFragment = {
+          fragment: { id: crypto.randomUUID(), position: capturedFragmentsRef.current.length + 1, createdAt: now, contentType: blob.type || 'audio/webm', uploadStatus: 'pending' },
+          blob,
+          url: URL.createObjectURL(blob),
+          transcript: fragmentTranscriptRef.current.trim(),
+        };
+        setCapturedFragments((current) => [...current, item]);
+        void uploadFragment(item);
         stream.getTracks().forEach((track) => track.stop());
       };
       const SpeechCtor = (window as unknown as { SpeechRecognition?: new () => SpeechRecognitionInstance; webkitSpeechRecognition?: new () => SpeechRecognitionInstance }).SpeechRecognition
@@ -188,8 +237,10 @@ export default function Home() {
         recognition.continuous = true;
         recognition.interimResults = false;
         recognition.onresult = (event) => {
-          const text = Array.from(event.results).filter((result) => result.isFinal).map((result) => result[0].transcript).join(' ');
-          if (text) setSourceText((current) => `${current} ${text}`.trim());
+          const results = Array.from(event.results);
+          const text = results.slice(recognitionProcessedCountRef.current).filter((result) => result.isFinal).map((result) => result[0].transcript).join(' ');
+          recognitionProcessedCountRef.current = results.length;
+          if (text) fragmentTranscriptRef.current = `${fragmentTranscriptRef.current} ${text}`.trim();
         };
         recognition.onerror = () => setVoiceMessage('Запись продолжается, но автоматическая расшифровка недоступна. Добавь текст вручную ниже.');
         recognition.start();
@@ -268,11 +319,26 @@ export default function Home() {
 
   if (view === 'method') return <main className="flow-shell"><AppHeader onHome={() => setView('landing')} hasBook={Boolean(appState.stories.length)} onBook={() => openWorkspace()} /><section className="choice-stage compact"><p className="eyebrow">Твой способ</p><h1>Как тебе удобнее рассказать?</h1><div className="method-grid"><button onClick={() => { resetStoryFlow('voice'); setView('capture'); }}><Icon>●</Icon><h2>Рассказать голосом</h2><p>Запиши живой рассказ. Если браузер умеет — появится черновая расшифровка.</p></button><button onClick={() => { resetStoryFlow('text'); setView('capture'); }}><Icon>✎</Icon><h2>Написать текстом</h2><p>Начни с любой детали. Порядок и литературность сейчас не важны.</p></button></div><button className="text-button" onClick={() => setView('first-choice')}>Назад</button></section></main>;
 
-  if (view === 'capture') return <main className="flow-shell"><AppHeader onHome={() => setView('landing')} hasBook={Boolean(appState.stories.length)} onBook={() => openWorkspace()} /><section className="writing-stage"><p className="eyebrow">{sourceMode === 'voice' ? 'Живой рассказ' : 'Черновик воспоминания'}</p><h1>{sourceMode === 'voice' ? 'Рассказывай так, как вспоминается.' : 'Начни с того, что хочется сохранить.'}</h1><p className="writing-lead">Не нужно говорить красиво или по порядку. Просто расскажи. Перед сохранением ты увидишь и исправишь весь текст.</p>{sourceMode === 'voice' && <div className="recorder"><button className={recording ? 'record-button active' : 'record-button'} onClick={recording ? stopRecording : startRecording}><span />{recording ? 'Остановить запись' : audioBlob ? 'Записать заново' : 'Начать запись'}</button>{recording && <span className="recording-live">Идёт запись</span>}{audioUrl && <audio controls src={audioUrl} aria-label="Прослушать запись" />}{voiceMessage && <p className="status-message">{voiceMessage}</p>}</div>}<label className="editor-label" htmlFor="source-story">{sourceMode === 'voice' ? 'Расшифровка или текст рассказа' : 'Твоя история'}</label><textarea id="source-story" className="story-textarea" value={sourceText} onChange={(event) => setSourceText(event.target.value)} placeholder={sourceMode === 'voice' ? 'Если слова не появились автоматически, добавь их здесь. Мы не будем выдавать запись за расшифрованную.' : 'Например: я до сих пор помню тот день…'} /><div className="char-note"><span>{sourceText.trim().length ? 'Черновик хранится на этом экране до сохранения' : 'Можно начать с одного предложения'}</span><span>{sourceText.length} знаков</span></div><div className="flow-actions"><button className="button-secondary" onClick={() => setView('method')}>Назад</button><button className="button-secondary" disabled={!sourceText.trim()} onClick={assemble}>Собрать историю сейчас</button><button className="button-primary" disabled={!sourceText.trim()} onClick={() => setView('interview')}>Ответить на один вопрос</button></div></section></main>;
+  if (view === 'capture') {
+    const hasVoiceText = capturedFragments.some((item) => item.transcript.trim());
+    const canContinue = sourceMode === 'voice' ? hasVoiceText && capturedFragments.every((item) => item.fragment.uploadStatus === 'saved') : Boolean(sourceText.trim());
+    return <main className="flow-shell"><AppHeader onHome={() => setView('landing')} hasBook={Boolean(appState.stories.length)} onBook={() => openWorkspace()} /><section className="writing-stage"><p className="eyebrow">{sourceMode === 'voice' ? 'Живой рассказ' : 'Черновик воспоминания'}</p><h1>{sourceMode === 'voice' ? 'Рассказывай так, как вспоминается.' : 'Начни с того, что хочется сохранить.'}</h1><p className="writing-lead">Не нужно говорить красиво или по порядку. Просто расскажи. Перед сохранением ты увидишь и исправишь весь текст.</p>{sourceMode === 'voice' && <div className="recorder"><button className={recording ? 'record-button active' : 'record-button'} onClick={recording ? stopRecording : startRecording}><span />{recording ? 'Остановить запись' : capturedFragments.length ? 'Записать дальше' : 'Начать запись'}</button>{recording && <span className="recording-live">Идёт запись</span>}{voiceMessage && <p className="status-message">{voiceMessage}</p>}<div className="fragment-list" aria-label="Аудиофрагменты и расшифровки">{capturedFragments.map((item) => <article key={item.fragment.id} className="fragment-card"><div><b>Аудио {item.fragment.position}</b><span className={`upload-${item.fragment.uploadStatus}`}>{item.fragment.uploadStatus === 'saved' ? 'оригинал сохранён' : item.fragment.uploadStatus === 'failed' ? 'нужно повторить загрузку' : 'сохраняем оригинал…'}</span></div><audio controls src={item.url} aria-label={`Прослушать аудио ${item.fragment.position}`} /><label>Расшифровка {item.fragment.position}<textarea value={item.transcript} onChange={(event) => updateFragmentTranscript(item.fragment.id, event.target.value)} placeholder="Добавь текст этого фрагмента, если распознавание недоступно." /></label>{item.fragment.uploadStatus === 'failed' && <button className="button-secondary" onClick={() => void uploadFragment(item)}>Повторить загрузку аудио</button>}</article>)}</div></div>} {sourceMode === 'text' && <><label className="editor-label" htmlFor="source-story">Твоя история</label><textarea id="source-story" className="story-textarea" value={sourceText} onChange={(event) => setSourceText(event.target.value)} placeholder="Например: я до сих пор помню тот день…" /><div className="char-note"><span>{sourceText.trim().length ? 'Черновик хранится на этом экране до сохранения' : 'Можно начать с одного предложения'}</span><span>{sourceText.length} знаков</span></div></>}<div className="flow-actions"><button className="button-secondary" onClick={() => setView('method')}>Назад</button><button className="button-secondary" disabled={!canContinue} onClick={assemble}>Собрать историю сейчас</button><button className="button-primary" disabled={!canContinue} onClick={() => setView('interview')}>Ответить на один вопрос</button></div></section></main>;
+  }
+
+  async function deleteAudioFragment(story: Story, fragmentId: string) {
+    await persist({ ...appState, stories: appState.stories.map((item) => item.id === story.id ? markAudioDeleted(item, fragmentId) : item), updatedAt: new Date().toISOString() });
+  }
+
+  async function addManualTranscriptRevision(story: Story, fragmentId: string) {
+    const text = window.prompt('Новая версия расшифровки. Предыдущая версия будет сохранена.', '');
+    if (!text?.trim()) return;
+    const nextStory = appendTranscriptRevision(story, { audioFragmentId: fragmentId, text, provider: 'manual' });
+    await persist({ ...appState, stories: appState.stories.map((item) => item.id === story.id ? nextStory : item), updatedAt: new Date().toISOString() });
+  }
 
   if (view === 'interview') {
     const remembering = !sourceText.trim();
-    return <main className="flow-shell"><AppHeader onHome={() => setView('landing')} hasBook={Boolean(appState.stories.length)} onBook={() => openWorkspace()} /><section className="question-stage"><p className="eyebrow">Один вопрос за раз</p><span className="question-count">{remembering ? `${memoryQuestion + 1} из ${MEMORY_QUESTIONS.length}` : 'Необязательный вопрос'}</span><h1>{remembering ? MEMORY_QUESTIONS[memoryQuestion] : FOLLOW_UP_QUESTION}</h1>{remembering ? <><p className="choice-lead">Не ищи самый правильный ответ. Выбери то воспоминание, к которому хочется вернуться.</p><div className="choice-actions"><button className="button-primary" onClick={() => { resetStoryFlow('text'); setView('capture'); }}>Рассказать об этом</button><button className="button-secondary" onClick={() => setMemoryQuestion((value) => (value + 1) % MEMORY_QUESTIONS.length)}>Предложи другой вопрос</button></div></> : <><textarea className="answer-textarea" aria-label="Ответ на вопрос" value={answer} onChange={(event) => setAnswer(event.target.value)} placeholder="Ответ можно оставить коротким или пропустить" /><div className="flow-actions"><button className="button-secondary" onClick={assemble}>Пропустить и собрать</button><button className="button-primary" onClick={assemble}>{answer.trim() ? 'Добавить ответ и собрать' : 'Собрать историю'}</button></div></>}</section></main>;
+    return <main className="flow-shell"><AppHeader onHome={() => setView('landing')} hasBook={Boolean(appState.stories.length)} onBook={() => openWorkspace()} /><section className="question-stage"><p className="eyebrow">Один вопрос за раз</p><span className="question-count">{remembering ? `${memoryQuestion + 1} из ${MEMORY_QUESTIONS.length}` : 'Необязательный вопрос'}</span><h1>{remembering ? MEMORY_QUESTIONS[memoryQuestion] : FOLLOW_UP_QUESTION}</h1>{remembering ? <><p className="choice-lead">Не ищи самый правильный ответ. Выбери то воспоминание, к которому хочется вернуться.</p><div className="choice-actions"><button className="button-primary" onClick={() => { resetStoryFlow('text'); setView('capture'); }}>Рассказать об этом</button><button className="button-secondary" onClick={() => setMemoryQuestion((value) => (value + 1) % MEMORY_QUESTIONS.length)}>Предложи другой вопрос</button></div></> : <><textarea className="answer-textarea" aria-label="Ответ на вопрос" value={answer} onChange={(event) => setAnswer(event.target.value)} placeholder="Ответ можно оставить коротким или пропустить" /><div className="flow-actions"><button className="button-secondary" onClick={() => { setAnswerViaVoice(true); setSourceMode('voice'); setCapturedFragments([]); setView('capture'); }}>Ответить голосом</button><button className="button-secondary" onClick={assemble}>Пропустить и собрать</button><button className="button-primary" onClick={assemble}>{answer.trim() ? 'Добавить ответ и собрать' : 'Собрать историю'}</button></div></>}</section></main>;
   }
 
   if (view === 'draft' && draft) return <main className="flow-shell"><AppHeader onHome={() => setView('landing')} hasBook={Boolean(appState.stories.length)} onBook={() => openWorkspace()} /><section className="review-stage"><div className="review-heading"><div><p className="eyebrow">Проверка перед книгой</p><h1>Проверь: всё ли здесь так, как ты это помнишь?</h1></div><span className="source-badge">Составлено только из твоих слов</span></div><article className="paper-page">{editingDraft ? <textarea className="paper-editor" value={draftText} onChange={(event) => setDraftText(event.target.value)} aria-label="Исправить текст истории" /> : <>{draft.text.split('\n').map((paragraph, index) => <p key={index}>{paragraph || '\u00a0'}</p>)}</>}</article><details className="provenance"><summary>Показать происхождение материала</summary>{draft.sources.map((source) => <p key={source.id}><b>{source.kind === 'typed' ? 'Введено текстом' : source.kind === 'transcript' ? 'Расшифровка / ручной текст записи' : source.kind === 'interview-answer' ? 'Ответ на вопрос' : 'Ручное исправление'}:</b> {source.text}</p>)}</details><div className="flow-actions">{editingDraft ? <><button className="button-secondary" onClick={() => { setDraftText(draft.text); setEditingDraft(false); }}>Отменить</button><button className="button-primary" onClick={saveDraftEdit}>Сохранить исправления</button></> : <><button className="button-secondary" onClick={() => { setDraftText(draft.text); setEditingDraft(true); }}>Нужно исправить</button><button className="button-primary" onClick={confirmDraft}>Всё верно — добавить в книгу</button></>}</div></section></main>;
@@ -283,7 +349,7 @@ export default function Home() {
     return <main className="workspace"><aside className="workspace-sidebar"><button className="wordmark wordmark-button" onClick={() => setView('landing')}>КтоЯ<span>.</span></button><p className="sidebar-book">Моя Книга жизни</p><nav aria-label="Разделы книги">{([['book','Книга','⌂'],['settings','Стиль','✦'],['privacy','Приватность','◌'],['export','Экспорт','↓'],['balance','Тариф и баланс','◎'],['feedback','Обратная связь','✎'],['roadmap','Будущее','→']] as Array<[WorkspacePanel,string,string]>).map(([panel,label,symbol]) => <button key={panel} className={workspacePanel === panel ? 'active' : ''} onClick={() => setWorkspacePanel(panel)}><span>{symbol}</span>{label}</button>)}</nav><button className="sidebar-home" onClick={() => setView('landing')}>На главную</button></aside><section className="workspace-main"><header className="workspace-top"><div><span className="privacy-dot">● Закрыто</span>{saveStatus === 'saving' && <span>Сохраняем…</span>}{saveStatus === 'saved' && <span>Все изменения сохранены</span>}{saveStatus === 'error' && <span className="error-text">Ошибка сохранения</span>}</div><div className="author-chip"><span>{appState.author?.name?.slice(0, 1).toUpperCase() ?? 'Я'}</span>{appState.author?.name ?? 'Автор'}</div></header>
       <nav className="mobile-section-nav" aria-label="Все разделы книги"><button onClick={() => setView('landing')}>Главная</button>{([['settings','Стиль'],['privacy','Приватность'],['export','Экспорт'],['balance','Баланс'],['feedback','Связь'],['roadmap','Будущее']] as Array<[WorkspacePanel,string]>).map(([panel,label]) => <button key={panel} className={workspacePanel === panel ? 'active' : ''} onClick={() => setWorkspacePanel(panel)}>{label}</button>)}</nav>
       {workspacePanel === 'book' && <section className="book-workspace"><div className="book-intro"><p className="eyebrow">Моя Книга жизни</p><h1>{appState.stories.length === 1 ? 'Первая история уже здесь.' : `${appState.stories.length} истории уже здесь.`}</h1><p>{appState.stories.length < 2 ? 'Книга начинается не с идеального плана, а с честно сохранённого воспоминания.' : 'Из отдельных воспоминаний постепенно становится виден путь — живой, настоящий и твой.'}</p><button className="button-primary" onClick={() => { resetStoryFlow(); setView('first-choice'); }}>Продолжить книгу</button></div><div className="book-shelf">{appState.stories.map((story, index) => <button className="story-card" key={story.id} onClick={() => { setSelectedStoryId(story.id); setWorkspacePanel('read'); }}><span>История {String(index + 1).padStart(2,'0')}</span><h2>{story.title}</h2><p>{story.text.slice(0, 150)}{story.text.length > 150 ? '…' : ''}</p><small>{new Date(story.createdAt).toLocaleDateString('ru-RU')}</small></button>)}<button className="story-card add-card" onClick={() => { resetStoryFlow(); setView('first-choice'); }}><strong>+</strong><span>Добавить историю</span></button></div><div className="trial-banner"><div><span>Пробный период</span><strong>{appState.trial.endsAt ? `до ${new Date(appState.trial.endsAt).toLocaleDateString('ru-RU')}` : 'начнётся после первой истории'}</strong></div><p>Даже после его окончания книга останется доступна для чтения, экспорта и управления данными.</p></div></section>}
-      {workspacePanel === 'read' && selectedStory && <section className="reader"><button className="back-link" onClick={() => setWorkspacePanel('book')}>← Ко всем историям</button><div className="reader-tools"><button onClick={() => speak(selectedStory.text)}>▶ Слушать</button>{selectedStory.audioKey && <a href={`/api/media?key=${encodeURIComponent(selectedStory.audioKey)}`}>● Оригинальная запись</a>}<button onClick={() => { setStoryEditText(selectedStory.text); setEditingStory(true); }}>✎ Редактировать</button></div><article className="reader-page"><p className="reader-kicker">КтоЯ · История</p><h1>{selectedStory.title}</h1>{editingStory ? <><textarea className="paper-editor" value={storyEditText} onChange={(event) => setStoryEditText(event.target.value)} /><div className="flow-actions"><button className="button-secondary" onClick={() => setEditingStory(false)}>Отменить</button><button className="button-primary" onClick={() => void updateStoryText()}>Сохранить исправления</button></div></> : selectedStory.text.split('\n').map((paragraph,index) => <p key={index}>{paragraph || '\u00a0'}</p>)}<footer><span>Только для тебя</span><span>{new Date(selectedStory.updatedAt).toLocaleDateString('ru-RU')}</span></footer></article></section>}
+      {workspacePanel === 'read' && selectedStory && <section className="reader"><button className="back-link" onClick={() => setWorkspacePanel('book')}>← Ко всем историям</button><div className="reader-tools"><button onClick={() => speak(selectedStory.text)}>▶ Слушать</button>{selectedStory.audioKey && <a href={`/api/media?key=${encodeURIComponent(selectedStory.audioKey)}`}>● Оригинальная запись</a>}<button onClick={() => { setStoryEditText(selectedStory.text); setEditingStory(true); }}>✎ Редактировать</button></div><article className="reader-page"><p className="reader-kicker">КтоЯ · Текущая история</p><h1>{selectedStory.title}</h1>{editingStory ? <><textarea className="paper-editor" value={storyEditText} onChange={(event) => setStoryEditText(event.target.value)} /><div className="flow-actions"><button className="button-secondary" onClick={() => setEditingStory(false)}>Отменить</button><button className="button-primary" onClick={() => void updateStoryText()}>Сохранить исправления</button></div></> : selectedStory.text.split('\n').map((paragraph,index) => <p key={index}>{paragraph || '\u00a0'}</p>)}<footer><span>Только для тебя</span><span>{new Date(selectedStory.updatedAt).toLocaleDateString('ru-RU')}</span></footer></article><StoryMaterials story={selectedStory} onDeleteAudio={deleteAudioFragment} onAddTranscript={addManualTranscriptRevision} /></section>}
       {workspacePanel === 'settings' && <SettingsPanel style={appState.style} onSave={(style) => void updateSettings(style)} />}
       {workspacePanel === 'privacy' && <PrivacyPanel privacy={appState.bookPrivacy} onSave={(privacy) => void updateSettings(undefined, privacy)} />}
       {workspacePanel === 'export' && <section className="panel-page"><p className="eyebrow">Твои данные — твои</p><h1>Забери книгу с собой</h1><p className="panel-lead">Экспорт не требует активной подписки. JSON сохраняет структуру и происхождение, Markdown — удобный читаемый текст, печать создаёт чистую книжную версию.</p><div className="option-grid"><button onClick={() => browserExportAdapter.json(appState)}><Icon>{'{ }'}</Icon><h2>JSON</h2><p>Полная переносимая копия данных.</p></button><button onClick={() => browserExportAdapter.markdown(appState)}><Icon>¶</Icon><h2>Markdown</h2><p>Текст книги для других редакторов.</p></button><button onClick={() => browserExportAdapter.print()}><Icon>▣</Icon><h2>Печать / PDF</h2><p>Книжная вёрстка через системную печать.</p></button></div></section>}
@@ -304,6 +370,16 @@ function SettingsPanel({ style, onSave }: { style: StoryStyle; onSave: (style: S
     { id: 'documentary', title: 'Документально', text: 'Прямая фиксация событий и формулировок.' },
   ];
   return <section className="panel-page"><p className="eyebrow">Настройка будущих историй</p><h1>Как тебе хочется сохранять следующие истории?</h1><p className="panel-lead">Стиль влияет только на форму будущей AI-обработки. Даже литературный режим никогда не получает права придумывать факты.</p><div className="style-list">{options.map((option) => <button key={option.id} className={style === option.id ? 'selected' : ''} onClick={() => onSave(option.id)}><span>{style === option.id ? '●' : '○'}</span><div><h2>{option.title}</h2><p>{option.text}</p></div></button>)}</div></section>;
+}
+
+function StoryMaterials({ story, onDeleteAudio, onAddTranscript }: { story: Story; onDeleteAudio: (story: Story, fragmentId: string) => void; onAddTranscript: (story: Story, fragmentId: string) => void }) {
+  const fragments = story.audioFragments ?? [];
+  const transcripts = story.transcriptRevisions ?? [];
+  if (!fragments.length && !story.sources.length) return null;
+  return <details className="provenance story-materials"><summary>Исходные материалы</summary><p>Оригиналы и версии расшифровок сохранены отдельно от текущего текста истории.</p>{fragments.map((fragment) => {
+    const revisions = transcripts.filter((revision) => revision.audioFragmentId === fragment.id);
+    return <article key={fragment.id}><b>Аудио {fragment.position}</b>{fragment.objectKey && fragment.uploadStatus !== 'deleted' && <audio controls src={`/api/media?key=${encodeURIComponent(fragment.objectKey)}`} />}<span>{fragment.uploadStatus === 'saved' ? 'Оригинал сохранён' : fragment.uploadStatus === 'deleted' ? 'Аудио скрыто; текст сохранён' : 'Статус загрузки: ' + fragment.uploadStatus}</span>{fragment.uploadStatus !== 'deleted' && <button className="text-button" onClick={() => onDeleteAudio(story, fragment.id)}>Скрыть аудио, оставить текст</button>}<button className="text-button" onClick={() => onAddTranscript(story, fragment.id)}>Добавить новую версию расшифровки</button>{revisions.map((revision, index) => <p key={revision.id}><b>Расшифровка {fragment.position}.{index + 1}{revision.selected ? ' · выбрана' : ''}:</b> {revision.text}</p>)}</article>;
+  })}{story.sources.filter((source) => source.kind === 'interview-answer' || source.kind === 'manual-edit').map((source) => <p key={source.id}><b>{source.kind === 'interview-answer' ? 'Ответ на вопрос' : 'Ручная правка'}:</b> {source.text}</p>)}</details>;
 }
 
 function PrivacyPanel({ privacy, onSave }: { privacy: PrivacyLevel; onSave: (privacy: PrivacyLevel) => void }) {
