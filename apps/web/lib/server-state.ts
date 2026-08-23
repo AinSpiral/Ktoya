@@ -39,8 +39,10 @@ async function hydrateState(db: D1Database, userId: string, book: StateRow): Pro
 }
 
 function stateShell(state: AppState) {
-  const { stories, stateVersion, ...shell } = state;
-  return shell;
+  const shell: Partial<AppState> = { ...state };
+  delete shell.stories;
+  delete shell.stateVersion;
+  return shell as Omit<AppState, 'stories'>;
 }
 
 async function writeInitialState(db: D1Database, userId: string, state: AppState, now: string) {

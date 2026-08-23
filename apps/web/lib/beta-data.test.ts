@@ -64,6 +64,27 @@ describe('safe beta data model', () => {
     expect(next.transcriptRevisions?.[0]).toMatchObject({ audioFragmentId: 'long-audio', verificationStatus: 'unverified', completenessStatus: 'incomplete' });
   });
 
+  it('persists an unfinished voice draft without turning it into a finished book story', () => {
+    const state = createEmptyState();
+    const saved = {
+      ...state,
+      captureDrafts: [{
+        id: 'capture-one',
+        sourceText: '',
+        answer: '',
+        interviewAnswers: [],
+        storyFragments: [{ fragment: { id: 'audio-one', position: 1, createdAt: state.updatedAt, contentType: 'audio/webm' as const, uploadStatus: 'saved' as const, objectKey: 'author/capture-one/audio-one.webm', recognitionStatus: 'incomplete' as const }, transcript: 'Начало записи.' }],
+        answerFragments: [],
+        voiceAnswerDrafts: [],
+        capturePurpose: 'story' as const,
+        updatedAt: state.updatedAt,
+      }],
+    };
+    const restored = JSON.parse(JSON.stringify(saved)) as typeof saved;
+    expect(restored.stories).toHaveLength(0);
+    expect(restored.captureDrafts[0].storyFragments[0]).toMatchObject({ transcript: 'Начало записи.', fragment: { id: 'audio-one', objectKey: 'author/capture-one/audio-one.webm', recognitionStatus: 'incomplete' } });
+  });
+
   it('preserves a legacy story and maps its audio and transcript into linked objects', () => {
     const state = createEmptyState();
     const legacy = {

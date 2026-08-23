@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { HeaderAuthAdapter, HttpStorageAdapter, StorageConflictError, browserExportAdapter, browserSpeechTranscriptionProvider } from '@/lib/adapters';
-import { createEmptyState, normalizeAppState, type AppState, type AudioFragment, type FeedbackEntry, type InterviewAnswer, type PrivacyLevel, type Story, type StoryStyle } from '@/lib/domain';
+import { createEmptyState, normalizeAppState, type AppState, type AudioFragment, type CaptureDraft, type CaptureDraftFragment, type FeedbackEntry, type InterviewAnswer, type PrivacyLevel, type Story, type StoryStyle } from '@/lib/domain';
 import { MEMORY_QUESTIONS, appendTranscriptRevision, makeStory, markAudioDeleted, markAudioHidden, nextFollowUpQuestion, startTrial } from '@/lib/story-logic';
 
 type View = 'landing' | 'first-choice' | 'method' | 'capture' | 'interview' | 'draft' | 'register' | 'workspace';
@@ -17,12 +17,26 @@ type SpeechRecognitionInstance = {
   onerror: ((event: { error: string }) => void) | null;
   onend: (() => void) | null;
 };
-type CapturedFragment = { fragment: AudioFragment; blob: Blob; url: string; transcript: string };
+type CapturedFragment = { fragment: AudioFragment; blob?: Blob; url: string; transcript: string };
 type VoiceAnswerDraft = { answerId: string; questionId: string; question: string; fragments: CapturedFragment[] };
 type CapturePurpose = 'story' | 'answer';
 
 const storage = new HttpStorageAdapter();
 const auth = new HeaderAuthAdapter();
+
+function viewFromLocation(): View {
+  if (typeof window === 'undefined') return 'landing';
+  const value = window.location.hash.slice(1);
+  return ['landing', 'first-choice', 'method', 'capture', 'interview', 'draft', 'register', 'workspace'].includes(value) ? value as View : 'landing';
+}
+
+function storedFragment(item: CapturedFragment): CaptureDraftFragment {
+  return { fragment: item.fragment, transcript: item.transcript };
+}
+
+function restoredFragment(item: CaptureDraftFragment): CapturedFragment {
+  return { ...item, url: item.fragment.objectKey ? storage.audioUrl(item.fragment.objectKey) : '' };
+}
 
 function Icon({ children }: { children: React.ReactNode }) {
   return <span className="icon" aria-hidden="true">{children}</span>;
@@ -38,7 +52,7 @@ function AppHeader({ onHome, onBook, hasBook = false }: { onHome: () => void; on
 }
 
 export default function Home() {
-  const [view, setView] = useState<View>('landing');
+  const [view, setView] = useState<View>(viewFromLocation);
   const [appState, setAppState] = useState<AppState>(() => createEmptyState());
   const [loaded, setLoaded] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
@@ -75,9 +89,9 @@ export default function Home() {
   const answerCapturedFragmentsRef = useRef<CapturedFragment[]>([]);
   const capturePurposeRef = useRef<CapturePurpose>('story');
   const captureStoryIdRef = useRef(crypto.randomUUID());
-  const recognitionProcessedCountRef = useRef(0);
   const recordingStopRequestedRef = useRef(false);
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const appStateRef = useRef(appState);
 
   useEffect(() => {
     let active = true;
@@ -87,6 +101,19 @@ export default function Home() {
         if (saved) {
           const reconciled = startTrial(normalizeAppState(saved));
           setAppState(reconciled);
+          appStateRef.current = reconciled;
+          const unfinished = [...(reconciled.captureDrafts ?? [])].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0];
+          if (unfinished) {
+            captureStoryIdRef.current = unfinished.id;
+            setSourceText(unfinished.sourceText);
+            setAnswer(unfinished.answer);
+            setInterviewAnswers(unfinished.interviewAnswers);
+            setCapturedFragments(unfinished.storyFragments.map(restoredFragment));
+            setAnswerCapturedFragments(unfinished.answerFragments.map(restoredFragment));
+            setVoiceAnswerDrafts(unfinished.voiceAnswerDrafts.map((item) => ({ ...item, fragments: item.fragments.map(restoredFragment) })));
+            setCapturePurpose(unfinished.capturePurpose);
+            setVoiceMessage('Незавершённый рассказ восстановлен. Оригиналы, которые уже были сохранены, можно прослушать и продолжить без потери материала.');
+          }
           if (reconciled.trial.endsAt !== saved.trial.endsAt || reconciled.trial.status !== saved.trial.status) void storage.save(reconciled);
         }
         if (user) setRegistration({ name: user.name === 'seedy' ? '' : user.name, email: user.email.endsWith('@sites.test') ? '' : user.email });
@@ -99,8 +126,11 @@ export default function Home() {
   useEffect(() => { capturedFragmentsRef.current = capturedFragments; }, [capturedFragments]);
   useEffect(() => { answerCapturedFragmentsRef.current = answerCapturedFragments; }, [answerCapturedFragments]);
   useEffect(() => { capturePurposeRef.current = capturePurpose; }, [capturePurpose]);
+  useEffect(() => { appStateRef.current = appState; }, [appState]);
   useEffect(() => {
     const current = window.history.state as { ktoyaView?: View; ktoyaFlow?: boolean } | null;
+    const requested = viewFromLocation();
+    if (view === 'landing' && (current?.ktoyaView ?? requested) !== 'landing') return;
     if (current?.ktoyaView !== view) {
       const state = { ...(current ?? {}), ktoyaFlow: true, ktoyaView: view };
       if (current?.ktoyaFlow) window.history.pushState(state, '', `#${view}`);
@@ -119,13 +149,47 @@ export default function Home() {
     [...capturedFragmentsRef.current, ...answerCapturedFragmentsRef.current].forEach((item) => URL.revokeObjectURL(item.url));
   }, []);
 
+  useEffect(() => {
+    if (!loaded) return;
+    const hasMaterial = Boolean(sourceText.trim() || answer.trim() || capturedFragments.length || answerCapturedFragments.length || interviewAnswers.length || voiceAnswerDrafts.length);
+    if (!hasMaterial) return;
+    const savedDraft: CaptureDraft = {
+      id: captureStoryIdRef.current,
+      sourceText,
+      answer,
+      interviewAnswers,
+      storyFragments: capturedFragments.map(storedFragment),
+      answerFragments: answerCapturedFragments.map(storedFragment),
+      voiceAnswerDrafts: voiceAnswerDrafts.map((item) => ({ ...item, fragments: item.fragments.map(storedFragment) })),
+      capturePurpose,
+      updatedAt: new Date().toISOString(),
+    };
+    const previous = appStateRef.current.captureDrafts?.find((item) => item.id === savedDraft.id);
+    const comparable = (item: CaptureDraft) => ({ ...item, updatedAt: undefined });
+    if (previous && JSON.stringify(comparable(previous)) === JSON.stringify(comparable(savedDraft))) return;
+    const timer = window.setTimeout(() => {
+      const current = appStateRef.current;
+      const next: AppState = {
+        ...current,
+        captureDrafts: [...(current.captureDrafts ?? []).filter((item) => item.id !== savedDraft.id), savedDraft],
+        updatedAt: savedDraft.updatedAt,
+      };
+      void persist(next);
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [loaded, sourceText, answer, interviewAnswers, capturedFragments, answerCapturedFragments, voiceAnswerDrafts, capturePurpose]);
+
   const selectedStory = useMemo(() => appState.stories.find((story) => story.id === selectedStoryId) ?? appState.stories[0] ?? null, [appState.stories, selectedStoryId]);
+  const hasCaptureDraft = Boolean(appState.captureDrafts?.length);
 
   async function persist(next: AppState) {
+    appStateRef.current = next;
     setAppState(next);
     setSaveStatus('saving');
     try {
-      setAppState(await storage.save(next));
+      const saved = await storage.save(next);
+      appStateRef.current = saved;
+      setAppState(saved);
       setSaveStatus('saved');
     } catch (error) {
       setSaveStatus('error');
@@ -174,7 +238,7 @@ export default function Home() {
     ];
     const now = new Date().toISOString();
     const transcriptRevisions = allFragments.filter(({ item }) => item.transcript.trim()).map(({ item }) => ({
-      id: crypto.randomUUID(), audioFragmentId: item.fragment.id, text: item.transcript.trim(), provider: 'browser-speech-recognition' as const, createdAt: now, selected: true, verificationStatus: 'unverified' as const, completenessStatus: item.fragment.recognitionStatus ?? 'unavailable' as const,
+      id: crypto.randomUUID(), audioFragmentId: item.fragment.id, text: item.transcript.trim(), provider: 'browser-speech-recognition' as const, createdAt: now, selected: true, verificationStatus: 'unverified' as const, completenessStatus: item.fragment.recognitionStatus === 'processing' ? 'incomplete' as const : item.fragment.recognitionStatus ?? 'unavailable' as const,
     }));
     const revisionByFragmentId = new Map(transcriptRevisions.map((revision) => [revision.audioFragmentId, revision.id]));
     const completeAnswers = answers.map((answerItem) => {
@@ -185,7 +249,7 @@ export default function Home() {
       return { ...answerItem, audioFragmentId: audioFragmentIds[0], audioFragmentIds, transcriptRevisionId: transcriptRevisionIds[0], transcriptRevisionIds };
     });
     const generated = makeStory({ sourceText: sourceText.trim() || voiceText, sourceMode: sourceText.trim() ? 'text' : 'voice', answers: completeAnswers, transcriptProvider: capturedFragments.length ? 'browser-speech-recognition' : undefined });
-    const base = capturedFragments.length ? { ...generated, id: captureStoryIdRef.current } : generated;
+    const base = { ...generated, id: captureStoryIdRef.current };
     const nextDraft = {
       ...base,
       interviewAnswers: completeAnswers,
@@ -222,6 +286,7 @@ export default function Home() {
       ...appState,
       author: appState.author ?? (author ? { id: crypto.randomUUID(), name: author.name, email: author.email, createdAt: now } : null),
       stories: [...appState.stories, story],
+      captureDrafts: (appState.captureDrafts ?? []).filter((item) => item.id !== story.id),
       book: { ...appState.book, storyIds: [...appState.book.storyIds, story.id], updatedAt: now },
       chapters: primaryChapter
         ? appState.chapters.map((chapter, index) => index === 0 ? { ...chapter, storyIds: [...chapter.storyIds, story.id], updatedAt: now } : chapter)
@@ -248,6 +313,10 @@ export default function Home() {
   }
 
   async function uploadFragment(item: CapturedFragment, purpose: CapturePurpose = capturePurposeRef.current) {
+    if (!item.blob) {
+      setVoiceMessage(`Оригинал аудио ${item.fragment.position} не был загружен до перезагрузки. Черновик и расшифровка сохранены, но для повторной загрузки нужна новая запись.`);
+      return;
+    }
     const update = (patch: Partial<AudioFragment>) => {
       const apply = (items: CapturedFragment[]) => items.map((current) => current.fragment.id === item.fragment.id ? { ...current, fragment: { ...current.fragment, ...patch } } : current);
       if (purpose === 'answer') setAnswerCapturedFragments(apply);
@@ -256,7 +325,9 @@ export default function Home() {
     try {
       const objectKey = await storage.saveAudio(captureStoryIdRef.current, item.fragment.id, item.blob);
       update({ uploadStatus: 'saved', objectKey, uploadedAt: new Date().toISOString() });
-      setVoiceMessage(`Аудио ${item.fragment.position} сохранено. Его исходный файл останется рядом с расшифровкой.`);
+      setVoiceMessage(item.fragment.recognitionStatus === 'processing'
+        ? `Аудио ${item.fragment.position} сохранено. Chrome ещё завершает расшифровку; не закрывай страницу до статуса результата.`
+        : `Аудио ${item.fragment.position} сохранено. Его исходный файл останется рядом с расшифровкой.`);
     } catch {
       update({ uploadStatus: 'failed' });
       setVoiceMessage(`Аудио ${item.fragment.position} не сохранено на сервере. Исходный файл оставлен здесь: повтори загрузку.`);
@@ -274,7 +345,6 @@ export default function Home() {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       chunksRef.current = [];
       fragmentTranscriptRef.current = '';
-      recognitionProcessedCountRef.current = 0;
       recordingStopRequestedRef.current = false;
       const recorder = new MediaRecorder(stream);
       recorderRef.current = recorder;
@@ -283,36 +353,61 @@ export default function Home() {
       let recognitionStatus: NonNullable<AudioFragment['recognitionStatus']> = recognitionFinished ? 'unavailable' : 'complete';
       let fragmentFinalized = false;
       let finalizationTimer: number | undefined;
+      let savedItem: CapturedFragment | null = null;
+      const updateSavedItem = (patch: { transcript?: string; recognitionStatus?: NonNullable<AudioFragment['recognitionStatus']> }) => {
+        if (!savedItem) return;
+        savedItem = {
+          ...savedItem,
+          transcript: patch.transcript ?? savedItem.transcript,
+          fragment: { ...savedItem.fragment, ...(patch.recognitionStatus ? { recognitionStatus: patch.recognitionStatus } : {}) },
+        };
+        const apply = (items: CapturedFragment[]) => items.map((item) => item.fragment.id === savedItem?.fragment.id ? savedItem : item);
+        if (purpose === 'answer') setAnswerCapturedFragments(apply);
+        else setCapturedFragments(apply);
+      };
       const finalizeFragment = (force = false) => {
         if (fragmentFinalized || !recordedBlob || (!recognitionFinished && !force)) return;
         fragmentFinalized = true;
-        if (finalizationTimer) window.clearTimeout(finalizationTimer);
         const now = new Date().toISOString();
         const currentFragments = purpose === 'answer' ? answerCapturedFragmentsRef.current : capturedFragmentsRef.current;
         const item: CapturedFragment = {
-          fragment: { id: crypto.randomUUID(), position: currentFragments.length + 1, createdAt: now, contentType: recordedBlob.type || 'audio/webm', uploadStatus: 'pending', recognitionStatus },
+          fragment: { id: crypto.randomUUID(), position: currentFragments.length + 1, createdAt: now, contentType: recordedBlob.type || 'audio/webm', uploadStatus: 'pending', recognitionStatus: recognitionFinished ? recognitionStatus : 'processing' },
           blob: recordedBlob,
           url: URL.createObjectURL(recordedBlob),
           transcript: fragmentTranscriptRef.current.trim(),
         };
+        savedItem = item;
         if (purpose === 'answer') setAnswerCapturedFragments((current) => [...current, item]);
         else setCapturedFragments((current) => [...current, item]);
         void uploadFragment(item, purpose);
-        stream.getTracks().forEach((track) => track.stop());
-        if (!item.transcript) setVoiceMessage('Расшифровка не получена. Оригинал сохранён; попробуй записать фрагмент ещё раз или добавь проверенный текст вручную.');
+        if (recognitionFinished) {
+          if (finalizationTimer) window.clearTimeout(finalizationTimer);
+          stream.getTracks().forEach((track) => track.stop());
+          if (!item.transcript) setVoiceMessage('Расшифровка не получена. Оригинал сохранён; попробуй записать фрагмент ещё раз или добавь проверенный текст вручную.');
+        }
       };
       recorder.ondataavailable = (event) => { if (event.data.size) chunksRef.current.push(event.data); };
       recorder.onstop = () => {
         recordedBlob = new Blob(chunksRef.current, { type: recorder.mimeType || 'audio/webm' });
-        // Chrome can emit the final SpeechRecognition result after MediaRecorder stops.
-        // Do not turn a slow final event into an apparently complete transcript.
+        // Stop the microphone recorder first. Chrome may still have final speech
+        // results queued at this point, so stopping SpeechRecognition before
+        // MediaRecorder.onstop can silently discard the tail of a long answer.
+        // Request its graceful stop only after the recorder has flushed its data.
+        recognitionRef.current?.stop();
+        // Chrome can emit the final SpeechRecognition result after MediaRecorder
+        // stops. Keep waiting for onend; a diagnostic timeout must never label a
+        // partial transcript as complete.
         finalizationTimer = window.setTimeout(() => {
           recognitionFinished = true;
           recognitionStatus = 'incomplete';
-          setVoiceMessage('Chrome не подтвердил конец расшифровки в течение 10 секунд. Оригинал сохранён, но этот transcript помечен как неполный: проверь хвост записи вручную.');
+          setVoiceMessage('Chrome не подтвердил конец расшифровки в течение минуты. Оригинал сохранён, но этот transcript помечен как неполный: проверь хвост записи вручную.');
+          updateSavedItem({ transcript: fragmentTranscriptRef.current.trim(), recognitionStatus });
+          stream.getTracks().forEach((track) => track.stop());
           finalizeFragment();
-        }, 10_000);
-        finalizeFragment();
+        }, 60_000);
+        // Persist the original immediately. The transcript remains visibly
+        // processing until Chrome confirms its final result.
+        finalizeFragment(true);
       };
       const SpeechCtor = (window as unknown as { SpeechRecognition?: new () => SpeechRecognitionInstance; webkitSpeechRecognition?: new () => SpeechRecognitionInstance }).SpeechRecognition
         ?? (window as unknown as { webkitSpeechRecognition?: new () => SpeechRecognitionInstance }).webkitSpeechRecognition;
@@ -323,10 +418,15 @@ export default function Home() {
         recognition.interimResults = true;
         recognition.onresult = (event) => {
           const results = Array.from(event.results);
-          const startAt = event.resultIndex ?? recognitionProcessedCountRef.current;
+          // Chrome starts a fresh result list when it transparently ends and
+          // restarts a long recognition session.  Falling back to the previous
+          // session's result count silently skipped that whole new tail.
+          const startAt = event.resultIndex ?? 0;
           const text = results.slice(startAt).filter((result) => result.isFinal).map((result) => result[0].transcript).join(' ');
-          recognitionProcessedCountRef.current = results.length;
-          if (text) fragmentTranscriptRef.current = `${fragmentTranscriptRef.current} ${text}`.trim();
+          if (text) {
+            fragmentTranscriptRef.current = `${fragmentTranscriptRef.current} ${text}`.trim();
+            updateSavedItem({ transcript: fragmentTranscriptRef.current });
+          }
         };
         recognition.onerror = (event) => {
           if (event.error !== 'aborted') {
@@ -347,6 +447,10 @@ export default function Home() {
             return;
           }
           recognitionFinished = true;
+          if (finalizationTimer) window.clearTimeout(finalizationTimer);
+          updateSavedItem({ transcript: fragmentTranscriptRef.current.trim(), recognitionStatus });
+          if (recognitionStatus === 'complete') setVoiceMessage('Расшифровка завершена. Проверь начало, середину и конец записи перед продолжением.');
+          stream.getTracks().forEach((track) => track.stop());
           finalizeFragment();
         };
         try {
@@ -375,7 +479,9 @@ export default function Home() {
 
   function stopRecording() {
     recordingStopRequestedRef.current = true;
-    recognitionRef.current?.stop();
+    // Do not stop recognition here: Chrome can drop a queued final result when
+    // SpeechRecognition is stopped in the same turn as MediaRecorder. The
+    // recorder's onstop handler asks it to finish after audio has flushed.
     recorderRef.current?.stop();
     setRecording(false);
   }
@@ -428,7 +534,7 @@ export default function Home() {
             <p className="eyebrow">КтоЯ — Книга жизни</p>
             <h1>Твоя жизнь<br />заслуживает книги</h1>
             <p className="hero-lead">Рассказывай голосом или текстом. «КтоЯ» поможет бережно сохранить воспоминания и собрать из них настоящую Книгу жизни — только из твоих слов.</p>
-            <div className="hero-actions"><button className="button-primary" onClick={() => setView('first-choice')}>Начать свою книгу</button><span className="privacy-note"><span>●</span> Всё созданное видно только тебе</span></div>
+            <div className="hero-actions"><button className="button-primary" onClick={() => setView('first-choice')}>Начать свою книгу</button>{hasCaptureDraft && <button className="button-secondary" onClick={() => setView('capture')}>Продолжить сохранённый черновик</button>}<span className="privacy-note"><span>●</span> Всё созданное видно только тебе</span></div>
           </div>
           <div className="book-scene" aria-label="Образ будущей Книги жизни"><div className="sun-shape" /><article className="book-cover"><div className="book-cover-top"><span>КтоЯ</span><span>Книга жизни</span></div><div className="book-title"><span>Истории,</span><span>которые</span><span>важно сохранить</span></div><p>Написана твоим голосом</p></article><div className="leaf leaf-one" /><div className="leaf leaf-two" /><p className="book-caption">Не идеальная биография.<br />Живая и настоящая жизнь.</p></div>
         </section>
@@ -453,7 +559,7 @@ export default function Home() {
     const isVoiceAnswer = capturePurpose === 'answer';
     const activeFragments = isVoiceAnswer ? answerCapturedFragments : capturedFragments;
     const hasVoiceText = activeFragments.some((item) => item.transcript.trim());
-    const canContinue = isVoiceAnswer ? hasVoiceText && activeFragments.every((item) => item.fragment.uploadStatus === 'saved') : Boolean(sourceText.trim() || hasVoiceText) && activeFragments.every((item) => item.fragment.uploadStatus === 'saved');
+    const canContinue = isVoiceAnswer ? hasVoiceText && activeFragments.every((item) => item.fragment.uploadStatus === 'saved' && item.fragment.recognitionStatus !== 'processing') : Boolean(sourceText.trim() || hasVoiceText) && activeFragments.every((item) => item.fragment.uploadStatus === 'saved' && item.fragment.recognitionStatus !== 'processing');
     const primaryText = [sourceText.trim(), capturedFragments.map((item) => item.transcript.trim()).filter(Boolean).join('\n\n')].filter(Boolean).join('\n\n');
     const question = nextFollowUpQuestion(primaryText, interviewAnswers);
     const finishVoiceAnswer = () => {

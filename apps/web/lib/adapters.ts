@@ -44,6 +44,7 @@ export interface StorageAdapter {
   save(state: AppState): Promise<AppState>;
   saveFeedback(entry: FeedbackEntry): Promise<void>;
   saveAudio(storyId: string, fragmentId: string, blob: Blob): Promise<string>;
+  audioUrl(objectKey: string): string;
 }
 
 export class StorageConflictError extends Error {}
@@ -89,6 +90,9 @@ export class HttpStorageAdapter implements StorageAdapter {
     if (!response.ok) throw new Error('Не удалось сохранить запись');
     const result = await response.json() as { key: string };
     return result.key;
+  }
+  audioUrl(objectKey: string) {
+    return `/api/media?key=${encodeURIComponent(objectKey)}`;
   }
 }
 

@@ -37,7 +37,7 @@ export interface AudioFragment {
   hiddenAt?: string;
   deletedAt?: string;
   /** Browser recognition failures are visible; a partial tail is never silently complete. */
-  recognitionStatus?: 'complete' | 'incomplete' | 'unavailable';
+  recognitionStatus?: 'processing' | 'complete' | 'incomplete' | 'unavailable';
 }
 
 /** A recognition attempt is append-only; one revision can be selected for reading. */
@@ -64,6 +64,35 @@ export interface InterviewAnswer {
   /** All recordings are retained when one answer is captured in several takes. */
   audioFragmentIds?: string[];
   transcriptRevisionIds?: string[];
+}
+
+/**
+ * Capture drafts are separate from finished stories.  They are persisted as
+ * soon as an author writes or records, so a reload cannot silently discard
+ * an already uploaded original or its working transcript.
+ */
+export interface CaptureDraftFragment {
+  fragment: AudioFragment;
+  transcript: string;
+}
+
+export interface VoiceAnswerCaptureDraft {
+  answerId: string;
+  questionId: string;
+  question: string;
+  fragments: CaptureDraftFragment[];
+}
+
+export interface CaptureDraft {
+  id: string;
+  sourceText: string;
+  answer: string;
+  interviewAnswers: InterviewAnswer[];
+  storyFragments: CaptureDraftFragment[];
+  answerFragments: CaptureDraftFragment[];
+  voiceAnswerDrafts: VoiceAnswerCaptureDraft[];
+  capturePurpose: 'story' | 'answer';
+  updatedAt: string;
 }
 
 export interface Revision {
@@ -150,6 +179,8 @@ export interface AppState {
   subscription: SubscriptionState;
   aiBalance: AIBalance;
   updatedAt: string;
+  /** Unfinished material is intentionally outside the finished-book list. */
+  captureDrafts?: CaptureDraft[];
   /** Version of book-level settings; stories have their own recordVersion. */
   stateVersion?: number;
 }
