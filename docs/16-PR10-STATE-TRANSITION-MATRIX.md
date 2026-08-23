@@ -19,7 +19,7 @@
 | Повторное нажатие/конфликт дублей | repeated transcript/manual/text/archive operation | `makes repeated edits and destructive-state transitions idempotent` | PASS |
 | Маршрутизация без лишнего «Рассказать» | first choice → capture; remembered prompt → inline interview | source inspection: route `method` и rendering removed; UX text updated | PASS |
 | Таймер на каждом входе записи | story capture / answer / book addition → active recording | source inspection: shared `recordingSeconds`, reset at start/stop, visible `role="timer"` in all three recorders | PARTIAL |
-| Фактическая пользовательская вкладка и микрофон | visible Chrome tab → actual Start/Stop → saved source | Chrome native host currently does not expose the selected user-visible tab to automation; no hidden-tab claim is used as evidence | BLOCKED |
+| Фактическая пользовательская вкладка и микрофон | visible Chrome tab → actual Start/Stop → saved source | 23.08.2026: Chrome was running; extension and native-host manifest diagnostics were healthy. After the author permitted opening one window in the same profile, one retry still returned no accessible user-visible tab. No hidden-tab claim is used as evidence. | BLOCKED |
 
 ## Explicitly not repeated in this bounded pass
 
@@ -27,4 +27,4 @@ The reversible audio archive/recovery path is already verified at remote head `3
 
 ## Required final step
 
-After the remaining non-browser implementation/documentation changes, run one integrated `test → lint → typecheck → build` regression. Any newly introduced source/state behavior must update this matrix before PR acceptance is considered.
+All non-browser code/state acceptance evidence in this bounded pass is complete. The user-visible Chrome layer remains externally blocked until the browser bridge exposes the selected real tab; it must be retested before PR acceptance is considered.
