@@ -1,11 +1,13 @@
 import type { AppState, FeedbackEntry } from './domain';
+import type { VoiceProviderCapabilities } from './voice-provider-registry';
 
 export interface AIProvider {
   assemble(sourceText: string, answers: Array<{ answer: string }>): Promise<string>;
   mode: 'deterministic' | 'connected';
 }
 
-export interface TranscriptionProvider {
+/** Live microphone fallback. It never processes an already saved recording. */
+export interface LiveTranscriptionProvider {
   isAvailable(): boolean;
   canRetranscribe(): boolean;
   retranscriptionUnavailableReason(): string | null;
@@ -18,7 +20,7 @@ export interface TranscriptionProvider {
  * a stored Blob through SpeechRecognition.  A production provider can replace
  * this boundary and implement real retranscription without changing provenance.
  */
-export class BrowserSpeechTranscriptionProvider implements TranscriptionProvider {
+export class BrowserSpeechTranscriptionProvider implements LiveTranscriptionProvider {
   isAvailable() {
     return typeof window !== 'undefined' && Boolean((window as Window & { SpeechRecognition?: unknown; webkitSpeechRecognition?: unknown }).SpeechRecognition
       ?? (window as Window & { webkitSpeechRecognition?: unknown }).webkitSpeechRecognition);
@@ -33,10 +35,31 @@ export class BrowserSpeechTranscriptionProvider implements TranscriptionProvider
 
 export const browserSpeechTranscriptionProvider = new BrowserSpeechTranscriptionProvider();
 
+export type ProviderJobResult<T> =
+  | { status: 'processing'; externalJobId: string }
+  | { status: 'ready'; value: T };
+
+/** Production boundary for an immutable, already saved AudioFragment. */
+export interface TranscriptionProvider {
+  readonly id: string;
+  submit(input: {
+    audio: ArrayBuffer;
+    contentType: string;
+    language: 'ru-RU';
+    literatureText?: boolean;
+  }): Promise<ProviderJobResult<{ text: string }>>;
+  poll?(externalJobId: string): Promise<ProviderJobResult<{ text: string }>>;
+}
+
+/** Production boundary that returns a reusable media asset, not browser speech. */
 export interface TTSProvider {
-  isAvailable(): boolean;
-  speak(text: string): void;
-  stop(): void;
+  readonly id: string;
+  submit(input: {
+    text: string;
+    language: 'ru-RU';
+    voiceId: string;
+  }): Promise<ProviderJobResult<{ audio: ArrayBuffer; contentType: string; durationMs?: number; voiceId?: string }>>;
+  poll?(externalJobId: string): Promise<ProviderJobResult<{ audio: ArrayBuffer; contentType: string; durationMs?: number; voiceId?: string }>>;
 }
 
 export interface StorageAdapter {
@@ -44,6 +67,7 @@ export interface StorageAdapter {
   save(state: AppState): Promise<AppState>;
   saveFeedback(entry: FeedbackEntry): Promise<void>;
   saveAudio(storyId: string, fragmentId: string, blob: Blob): Promise<string>;
+  saveDerivedAudio(storyId: string, fragmentId: string, assetId: string, blob: Blob): Promise<string>;
   audioUrl(objectKey: string): string;
 }
 
@@ -91,8 +115,50 @@ export class HttpStorageAdapter implements StorageAdapter {
     const result = await response.json() as { key: string };
     return result.key;
   }
+  async saveDerivedAudio(storyId: string, fragmentId: string, assetId: string, blob: Blob) {
+    const response = await fetch(`/api/media?story=${encodeURIComponent(storyId)}&fragment=${encodeURIComponent(fragmentId)}&asset=${encodeURIComponent(assetId)}&kind=derived`, { method: 'PUT', headers: this.headers(blob.type || 'audio/wav'), body: blob });
+    if (!response.ok) throw new Error('Не удалось сохранить техническую копию записи');
+    const result = await response.json() as { key: string };
+    return result.key;
+  }
   audioUrl(objectKey: string) {
     return `/api/media?key=${encodeURIComponent(objectKey)}`;
+  }
+}
+
+export class HttpVoiceProcessingAdapter {
+  private headers(contentType?: string) {
+    const headers: Record<string, string> = contentType ? { 'content-type': contentType } : {};
+    if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) headers['x-ktoya-dev-user'] = 'local-development-author';
+    return headers;
+  }
+
+  async capabilities(): Promise<VoiceProviderCapabilities> {
+    const response = await fetch('/api/voice/capabilities', { cache: 'no-store' });
+    if (!response.ok) throw new Error('Не удалось проверить готовность голосовых сервисов.');
+    return response.json() as Promise<VoiceProviderCapabilities>;
+  }
+
+  async transcribe(storyId: string, audioFragmentId: string, processingMode: 'faithful' | 'literature-derived' = 'faithful'): Promise<AppState> {
+    return this.post('/api/voice/transcription', { storyId, audioFragmentId, ...(processingMode === 'faithful' ? {} : { processingMode }) });
+  }
+
+  async transcribeCaptureDraft(captureDraftId: string, audioFragmentId: string, processingMode: 'faithful' | 'literature-derived' = 'faithful'): Promise<AppState> {
+    return this.post('/api/voice/transcription', { captureDraftId, audioFragmentId, ...(processingMode === 'faithful' ? {} : { processingMode }) });
+  }
+
+  async narrate(storyId: string, voiceId?: string): Promise<AppState> {
+    return this.post('/api/voice/narration', { storyId, ...(voiceId ? { voiceId } : {}) });
+  }
+
+  private async post(path: string, body: Record<string, string>): Promise<AppState> {
+    const response = await fetch(path, { method: 'POST', headers: this.headers('application/json'), body: JSON.stringify(body) });
+    if (response.status === 409) throw new StorageConflictError('Книга изменилась в другой вкладке');
+    if (!response.ok) {
+      const detail = await response.json().catch(() => null) as { message?: string } | null;
+      throw new Error(detail?.message ?? 'Голосовая операция не завершилась. Исходный материал сохранён.');
+    }
+    return response.json() as Promise<AppState>;
   }
 }
 

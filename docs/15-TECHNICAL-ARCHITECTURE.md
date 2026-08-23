@@ -1,7 +1,7 @@
 # Техническая архитектура первой Beta KTOYA
 
-Версия: 1.2
-Дата: 22.08.2026
+Версия: 1.4
+Дата: 23.08.2026
 Статус: действующий baseline реализованной первой Beta.
 
 ## 1. Назначение
@@ -44,7 +44,7 @@
 - `PaymentAdapter`;
 - `ExportAdapter`.
 
-Текущие реализации не связывают доменное ядро с конкретным LLM, STT, платёжной системой или OAuth-провайдером.
+Доменное ядро не связано с конкретным LLM, STT/TTS, платёжной системой или OAuth-провайдером. HTTP-граница голосовой обработки уже стабильна; платный provider и секреты намеренно не включены до отдельного решения Автора.
 
 ## 5. Хранение и идентичность
 
@@ -74,14 +74,38 @@
 ## 7. Голос, озвучивание и экспорт
 
 - запись использует browser `MediaRecorder`;
-- browser Speech Recognition используется только при фактической доступности;
-- при отсутствии распознавания запись не выдаётся за расшифрованную: Автор вручную подтверждает текст;
-- чтение использует `speechSynthesis` с русской локалью;
+- browser Speech Recognition используется только как live fallback/debug при фактической доступности;
+- production STT обрабатывает только уже сохранённый оригинал через `TranscriptionProvider`; submit/poll и повторные попытки не зависят от UI;
+- production TTS создаёт сохранённый `StoryNarration` для точной `StoryRevision` через `TTSProvider`, а не через `speechSynthesis`;
+- готовая озвучка проигрывается обычным `<audio controls>` с pause, seek, duration, replay и повторным открытием после reload;
+- `/api/media` поддерживает HTTP Range (`206`, `Content-Range`, `Accept-Ranges`) для перемотки сохранённого трека;
 - экспорт работает в JSON, Markdown и через книжный print/PDF-режим.
 
-Один голосовой рассказ состоит из нескольких независимых `AudioFragment`: каждый имеет собственный R2 key, статус подтверждённой загрузки и связанные версии расшифровки. До подтверждения истории материал живёт не только в UI: `AppState.captureDrafts` отдельно сохраняет текст, фрагменты, ответы и их provenance; после reload сохранённый оригинал загружается только через авторизованный `/api/media`. Голосовой ответ на уточняющий вопрос использует отдельный capture-buffer, а не буфер основного рассказа; связь хранится как `questionId → InterviewAnswer → StorySource → AudioFragment → TranscriptRevision`. При нескольких дублях одного ответа массивы идентификаторов сохраняют все фрагменты и все версии. Повторная ручная расшифровка добавляет новую `TranscriptRevision` и сохраняет прежнюю. Архивирование аудио — только обратимое поле отображения: оно не удаляет R2-объект, текст, revisions или provenance; legacy `deleted` при чтении преобразуется в это архивное состояние. Browser transcript сохраняется как `raw` и `unverified`; будущий production STT/AI создаёт отдельную `improved` revision с `basedOnRevisionId` на raw-материал. Тем самым улучшение не удаляет оригинальный текст, аудио или provenance.
+Один голосовой рассказ состоит из нескольких независимых `AudioFragment`: каждый имеет собственный R2 key, статус подтверждённой загрузки и связанные версии расшифровки. До подтверждения истории `AppState.captureDrafts` сохраняет текст, фрагменты, ответы, `TranscriptRevision` и `TranscriptionAttempt`. Поэтому production STT можно безопасно повторить сразу после сохранения аудио, ещё до сборки истории; те же идентификаторы versions/attempts затем переносятся в `Story`, а не пересоздаются. После reload оригинал загружается только через авторизованный `/api/media`.
 
-Фактический QA 22.08.2026 подтвердил desktop reader TTS state-flow и сохранение текстовой истории после reload, а также отсутствие горизонтального overflow на 1440, 1280, 390 и 360 px. Последующая ручная Chrome-проверка с микрофоном сначала обнаружила пустой transcript, а затем обрезание финальной контрольной фразы записи 1:19. При stop lifecycle сначала завершает `MediaRecorder`; сразу сохраняет оригинал как `processing`; и только затем останавливает recognition, принимая все final results до `onend` в тот же фрагмент. Если Chrome не подтвердил окончание в течение минуты, исходный файл сохраняется, а transcript/revision получают явный `incomplete`, а не маскируются под полный результат. Пользовательская проверка после исправления подтвердила полную расшифровку записи 102 секунды — обрыв устранён. Но качество остаётся неприемлемым: ошибки слов и почти отсутствие пунктуации. Поэтому Browser Speech Recognition — только raw/debug fallback, а не production STT. Browser API не может безопасно применить Speech Recognition к уже сохранённому Blob: `BrowserSpeechTranscriptionProvider` честно сообщает, что real retranscribe потребует production STT. Это обязательный launch blocker публичной Beta: через заменяемый `TranscriptionProvider` должен быть подключён и фактически принят quality-grade русский STT; платный внешний сервис этим PR не подключается.
+Голосовой ответ на уточняющий вопрос использует отдельный capture-buffer. Связь хранится как `questionId → InterviewAnswer → StorySource → AudioFragment → TranscriptRevision`; несколько дублей ответа сохраняют все фрагменты и версии. Browser transcript — неизменяемый `raw`/`unverified`; production STT, manual correction и будущая AI-редактура добавляют отдельные `improved` revisions. `basedOnRevisionId` производственной расшифровки указывает на сохранённый raw, если он есть. Выбор новой версии обновляет читаемый текст через новую `StoryRevision`; прежние `StoryRevision`, sources и question provenance остаются. Ошибка/таймаут provider сохраняется как безопасный статус попытки без provider payload или секрета и не влияет на аудио/текст. Архивирование аудио остаётся обратимым отображением и никогда не удаляет R2-объект.
+
+`StoryNarration` хранит provider, статус job, точный `storyRevisionId`, R2 key, media type, voice и длительность. Один готовый asset кэшируется для пары provider + revision. После правки текста прежняя озвучка остаётся в истории, но `narrationForCurrentRevision` её не возвращает; UI предлагает создать актуальную. Provider обязан вернуть реальные аудиобайты, которые сервер сохраняет в R2. Browser `speechSynthesis` больше не считается production fallback: при отсутствии provider интерфейс честно показывает launch blocker.
+
+### 7.1. Provider research и граница решения
+
+Актуальное исследование официальной документации 23.08.2026 даёт следующий shortlist:
+
+| Вариант | Русский STT и длинные записи | Русский TTS | Цена/доступность | Вывод |
+| --- | --- | --- | --- | --- |
+| Yandex SpeechKit | API v3: async до 4 часов/1 ГБ, text normalization и `literatureText` для пунктуации/регистра; заявленная скорость около 10 секунд на минуту аудио | Много русских neural voices и амплуа; WAV/OGG/MP3; один запрос до 5000 символов в unsafe/streaming mode | Точный тариф региона Россия надо подтвердить в billing console; публичная страница другого региона не переносится на РФ | Рекомендуемый единый provider для ограниченного фактического trial |
+| SaluteSpeech | Async до 1 ГБ, русский; sync до 1 минуты | Async до 1 000 000 символов, русский/opus; SSML недоступен в async | 0,6 ₽/мин STT и 0,000186 ₽/символ TTS для юрлиц, но минимум pay-as-you-go 15 000 ₽ в активный месяц; официальные страницы одновременно сообщают, что подключение новых клиентов с 15.07.2026 недоступно | Технически сильный fallback/benchmark, но сейчас непригоден как доступный provider нового Beta-проекта |
+| MWS audio models | Несколько русскоязычных ASR-моделей | Qwen TTS | Модели помечены Preview, подтверждённого production SLA/качества и подходящей цены нет | Не использовать как public-Beta baseline |
+
+Источники: [Yandex SpeechKit limits](https://yandex.cloud/ru-kz/docs/speechkit/concepts/limits), [пунктуация](https://yandex.cloud/en/docs/troubleshooting/speechkit/how-to/enabling-punctuator-in-speechkit), [голоса](https://yandex.cloud/ru-kz/docs/speechkit/tts/voices), [data privacy](https://yandex.cloud/ru/security/data-privacy), [SaluteSpeech limits](https://developers.sber.ru/docs/ru/salutespeech/guides/recognition/encodings), [async TTS](https://developers.sber.ru/docs/ru/salutespeech/guides/synthesis/synthesis-async), [тарифы и доступность](https://developers.sber.ru/docs/ru/salutespeech/tariffs/legal-tariffs), [MWS audio inference](https://mws.ru/docs/cloud-platform/gpt/general/inference-audio.html).
+
+Автор разрешил ограниченный Yandex SpeechKit trial по D054. Публичные ставки российского прайса на 23.08.2026 — 0,1515 ₽ за первые 15 секунд async STT и далее 0,0101 ₽ за начисленную секунду; TTS v3 — 0,1626 ₽ за каждую начатую единицу 250 символов, включая НДС. Это ещё не account-specific readback: до первого вызова runtime требует свежие подтверждённые ставки конкретного billing account, точные scopes, проверку IAM и неистёкший ключ. План acceptance — STT 20/150/60 секунд и шесть TTS-голосов на 1000 символов с двукратным запасом повторов — оценивается в 12,4508 ₽; операционный cap устанавливается 25 ₽, абсолютный предел Автора остаётся 500 ₽. Источник: [актуальные правила тарификации SpeechKit](https://aistudio.yandex.ru/docs/ru/speechkit/pricing.html).
+
+Trial реализован как отдельный privacy/billing контур. Новая запись получает `qa-nonpersonal-trial` только после явного выбора; старые материалы без маркера отвергаются сервером до чтения R2. Browser WebM/Opus остаётся immutable original. Поскольку browser runtime не предоставляет безопасный нативный WebM→OGG remux, локально декодируется копия и создаётся отдельный mono PCM16 WAV 16 kHz (`DerivedAudioAsset`, `transcode-pcm-wav`); оригинал не меняется и не удаляется. Если позже появится проверенный remux, модель допускает `remux-ogg-opus` без изменения provenance.
+
+Перед внешним запросом D1 одним уникальным `operationId` резервирует консервативную максимальную стоимость, связанную с user, kind и sourceId. Сам provider повторно читает эту reservation. Если процесс оборвался между запросом и сохранением ответа, статус становится `uncertain`, а автоматический повтор запрещён. STT отправляет только derived WAV/OGG/MP3 и по умолчанию/в canonical flow устанавливает `literatureText: false`. TTS возвращает объединённый OGG/Opus asset; каждый voice и `StoryRevision` образуют отдельную append-only narration. По human QA 23.08.2026 Beta default — `marina`: лучший из шести проверенных вариантов, чистый и неутомляющий, но не идеальный (пожелание — более мягкий/нежный женский голос без потери дикции, в перспективе также голос Автора). Default хранится в защищённой runtime-конфигурации `KTOYA_SPEECHKIT_DEFAULT_TTS_VOICE`, валидируется только по списку проверенных голосов и не меняет ранее сохранённые narration assets; UI сохраняет возможность сравнить и выбрать другой разрешённый голос.
+
+Фактический QA 22.08.2026 подтвердил desktop reader TTS state-flow и сохранение текстовой истории после reload, а также отсутствие горизонтального overflow на 1440, 1280, 390 и 360 px. Последующая ручная Chrome-проверка с микрофоном сначала обнаружила пустой transcript, а затем обрезание финальной контрольной фразы записи 1:19. При stop lifecycle сначала завершает `MediaRecorder`; сразу сохраняет оригинал как `processing`; и только затем останавливает recognition, принимая все final results до `onend` в тот же фрагмент. Если Chrome не подтвердил окончание в течение минуты, исходный файл сохраняется, а transcript/revision получают явный `incomplete`, а не маскируются под полный результат. Пользовательская проверка после исправления подтвердила полную расшифровку записи 102 секунды — обрыв устранён. Но качество остаётся неприемлемым: ошибки слов и почти отсутствие пунктуации. Поэтому Browser Speech Recognition — только raw/debug fallback, а не production STT. Browser API не может безопасно применить Speech Recognition к уже сохранённому Blob: `BrowserSpeechTranscriptionProvider` честно сообщает, что real retranscribe потребует production STT. Для ограниченного неперсонального trial через заменяемый `TranscriptionProvider` подключён и фактически проверен Yandex SpeechKit; до отдельного privacy/legal решения и качественного benchmark на допустимых production-данных он не является разрешением отправлять личные истории во внешний provider. Качество STT trial зафиксировано как следующий public-Beta launch blocker, а не как молчаливо принятый production baseline.
 
 ## 8. Пробный период и платежи
 
@@ -108,7 +132,8 @@
 
 - место размещения и требования российского рынка к данным;
 - шифрование, резервирование, восстановление и удаление;
-- внешний LLM/STT с политикой минимизации передаваемых данных;
+- утверждение и фактическая STT/TTS-приёмка provider, ограниченного бюджета, секретов и WebM→поддерживаемый container conversion;
+- внешний LLM с политикой минимизации передаваемых данных;
 - российский платёжный провайдер;
 - фактическая экономика AI-баланса и лимитов;
 - эксплуатационный мониторинг и incident response.

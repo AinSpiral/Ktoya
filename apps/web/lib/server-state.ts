@@ -1,4 +1,4 @@
-import { betaSchema } from '@/db/schema';
+import { betaSchema, voiceTrialCompatibilityUpgrades } from '@/db/schema';
 import { migrateLegacyState } from '@/lib/legacy-migration';
 import type { AppState, Story } from '@/lib/domain';
 import { assertExpectedVersion } from '@/lib/concurrency';
@@ -10,6 +10,22 @@ export class StateConflictError extends Error {}
 
 export async function ensureBetaSchema(db: D1Database) {
   await db.batch(betaSchema.map((sql) => db.prepare(sql)));
+  const columns = await voiceTrialOperationColumns(db);
+  for (const upgrade of voiceTrialCompatibilityUpgrades(columns)) {
+    try {
+      await db.prepare(upgrade.sql).run();
+    } catch (error) {
+      // Another concurrent request may have completed the same additive
+      // migration. Re-read the schema and suppress only that proven-safe race.
+      const refreshed = await voiceTrialOperationColumns(db);
+      if (!refreshed.has(upgrade.column)) throw error;
+    }
+  }
+}
+
+async function voiceTrialOperationColumns(db: D1Database) {
+  const info = await db.prepare('PRAGMA table_info(voice_trial_operations)').all<{ name: string }>();
+  return new Set((info.results ?? []).map((column) => column.name));
 }
 
 export async function loadAuthorState(db: D1Database, userId: string): Promise<AppState | null> {

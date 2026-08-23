@@ -7,6 +7,44 @@
 
 # [Не выпущено]
 
+## 23.08.2026 — human TTS acceptance и Beta default `marina`
+
+### Изменено
+- `marina` выбрана Автором как конфигурируемый default русского TTS текущей Beta. Runtime использует `KTOYA_SPEECHKIT_DEFAULT_TTS_VOICE` и отвергает неизвестное значение вместо неявной подстановки; при отсутствии переменной действует подтверждённый fallback `marina`.
+- Другие проверенные голоса остаются доступными для сравнения, а ранее созданные `StoryNarration` не изменяются при будущей смене default.
+
+### Фактическая human QA
+- На одном неперсональном тексте длиной 1066 символов сравнены `marina`, `jane`, `dasha`, `julia`, `alexander`, `kirill`; все шесть assets сохранились после reload и имеют длительность 1:14–1:23.
+- Автор подтвердил `marina` как лучший из проверенных: естественный и чистый, немного грубоватый, но приятный и неутомляющий. Последняя контрольная фраза длинной озвучки прозвучала полностью, тихого обрыва нет.
+- Это Beta acceptance, не утверждение идеального постоянного голоса: следующий поиск направлен на более мягкий/нежный женский голос без потери чистоты дикции и, отдельно, на будущий голос Автора.
+
+## 23.08.2026 — ограниченный Yandex SpeechKit trial в PR #11
+
+### Решено и реализовано до платных запросов
+- Добавлено решение D054: Yandex SpeechKit разрешён только для новых неперсональных QA-материалов, с отдельным временным service account, двумя least-privilege ролями, двумя explicit API-key scopes и коротким сроком действия.
+- Browser WebM/Opus остаётся immutable original; отдельный mono PCM16 WAV 16 kHz хранится как `DerivedAudioAsset` для STT и не заменяет исходник.
+- Серверный privacy gate блокирует старые/личные истории до чтения R2; canonical STT всегда использует `literatureText: false`.
+- Перед каждым потенциально платным вызовом создаётся уникальная D1 budget reservation. Повтор или неопределённый исход не может незаметно создать второй запрос.
+- Публичный план trial рассчитан в 12,4508 ₽ с двукратным запасом; рабочий cap — 25 ₽, абсолютный пользовательский предел — 500 ₽. Первый вызов всё ещё заблокирован до readback тарифа конкретного billing account.
+- Для одной `StoryRevision` можно сохранить и сравнить отдельные narration assets шести русских голосов; финальный выбор остаётся за Автором.
+
+## 23.08.2026 — production voice foundation после PR #10
+
+### Реализовано без платного provider
+- Разделены browser live fallback и production `TranscriptionProvider`: сохранённый `AudioFragment` обрабатывается независимым submit/poll job, а каждая ошибка и повторная попытка сохраняются append-only без изменения оригинала.
+- `TranscriptRevision` и `TranscriptionAttempt` теперь живут уже в persisted capture-draft. Production STT можно повторить после надёжной загрузки аудио до сборки истории; raw/manual/production revisions и их идентификаторы переносятся в `Story` без потери `questionId`, `StorySource` или provenance.
+- Production `TTSProvider` возвращает реальный аудио-asset для точной `StoryRevision`; готовый файл хранится в R2 и проигрывается стандартным seekable media player. Правка текста сохраняет старый файл как историческую версию, но не выдаёт его за актуальный.
+- Media API поддерживает byte ranges для pause/seek/replay/reload; capability endpoints и ошибки не раскрывают provider payload или секреты.
+- Зафиксировано решение D053 и актуальное provider research. Рекомендуется ограниченный Yandex SpeechKit trial; подключение, billing и секреты ждут отдельного разрешения Автора.
+
+### Проверено до provider decision
+- Targeted regression: 40 тестов для capture/book transcription, retries, question provenance, StoryRevision update, TTS cache/stale/error, HTTP adapters и data safety.
+- TypeScript typecheck проходит. Полный test/lint/typecheck/build/diff-check будет выполнен один раз после фактического provider integration, как требует граница этапа.
+
+### Остаётся launch blocker
+- Реальная production STT-приёмка на короткой/1–2-минутной русской речи и реальная human TTS-приёмка ещё невозможны без разрешённого provider/API.
+- Browser MediaRecorder в Chrome сохраняет WebM/Opus, а shortlist providers документирует WAV/OGG/MP3/FLAC, но не WebM; до production trial нужен подтверждённый input path или server-side conversion.
+
 ## 23.08.2026 — PR #10: обратимое архивирование вместо удаления
 
 ### Изменено в PR #10

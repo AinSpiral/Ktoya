@@ -232,6 +232,11 @@ button:disabled { cursor: not-allowed; opacity: .42; transform: none !important;
 .story-materials article + article { margin-top: 12px; }
 .story-materials .text-button { width: fit-content; }
 .story-materials textarea { min-height: 112px; width: 100%; margin-top: 7px; }
+.transcription-action { display: grid; gap: 8px; align-items: start; }
+.transcription-action .button-secondary { width: fit-content; }
+.transcription-action p { margin: 0; }
+.qa-trial-consent { display: flex; gap: 10px; align-items: flex-start; margin-bottom: 14px; padding: 12px 14px; border: 1px solid #b89964; border-radius: 14px; background: rgba(255,248,225,.72); color: #55472f; line-height: 1.45; }
+.qa-trial-consent input { width: 20px; height: 20px; flex: 0 0 auto; margin-top: 1px; }
 .title-editor { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; margin: 22px 0; }
 .title-editor h1, .title-editor h2 { margin: 0; overflow-wrap: anywhere; }
 .title-editor label { flex: 1 1 320px; display: grid; gap: 8px; font-weight: 750; }
@@ -245,6 +250,7 @@ button:disabled { cursor: not-allowed; opacity: .42; transform: none !important;
 .book-addition-editor > h2 { margin-top: 0; font: 600 32px/1.1 var(--font-serif), Georgia, serif; }
 .book-addition-editor .story-textarea { min-height: 180px; margin-bottom: 18px; }
 .narration-player audio { width: 100%; }
+.narration-player small { display: block; margin-top: 10px; color: #687a72; line-height: 1.45; }
 .danger-button { color: #a5483d; }
 .roadmap-vertical { margin-top: 55px; border-left: 1px solid var(--line); }
 .roadmap-vertical article { position: relative; padding: 5px 0 35px 45px; }
