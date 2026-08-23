@@ -21,7 +21,15 @@ export function migrateLegacyState(input: AppState): LegacyMigrationResult {
 
 function migrateLegacyStory(story: Story, migratedStoryIds: string[]): Story {
   if (story.audioFragments && story.transcriptRevisions && !story.audioKey) {
-    return { ...story, recordVersion: story.recordVersion ?? 1, status: story.status ?? 'confirmed' };
+    return {
+      ...story,
+      recordVersion: story.recordVersion ?? 1,
+      status: story.status ?? 'confirmed',
+      transcriptRevisions: story.transcriptRevisions.map((revision) => ({
+        ...revision,
+        revisionKind: revision.revisionKind ?? (revision.provider === 'browser-speech-recognition' ? 'raw' : 'improved'),
+      })),
+    };
   }
 
   const audioFragments: AudioFragment[] = [];
@@ -44,6 +52,7 @@ function migrateLegacyStory(story: Story, migratedStoryIds: string[]): Story {
         audioFragmentId: fragmentId,
         text: story.transcript.text,
         provider: story.transcript.provider,
+        revisionKind: story.transcript.provider === 'browser-speech-recognition' ? 'raw' : 'improved',
         createdAt: story.createdAt,
         selected: true,
       });

@@ -42,7 +42,7 @@ export function makeStory(input: {
   sourceText: string;
   sourceMode: 'text' | 'voice';
   answers: InterviewAnswer[];
-  transcriptProvider?: 'browser-speech-recognition' | 'manual';
+  transcriptProvider?: TranscriptRevision['provider'];
 }): Story {
   const now = new Date().toISOString();
   const text = assembleStory(input.sourceText, input.answers);
@@ -70,7 +70,7 @@ export function makeStory(input: {
     transcript: input.sourceMode === 'voice' ? {
       text: input.sourceText.trim(),
       provider: input.transcriptProvider ?? 'manual',
-      confirmed: true,
+      confirmed: input.transcriptProvider !== 'browser-speech-recognition',
     } : undefined,
     interviewAnswers: input.answers,
     revisions: [{ id: crypto.randomUUID(), text, createdAt: now, reason: 'assembled' }],
@@ -92,14 +92,20 @@ export function appendTranscriptRevision(story: Story, input: {
   verificationStatus?: TranscriptRevision['verificationStatus'];
   completenessStatus?: TranscriptRevision['completenessStatus'];
   questionId?: string;
+  revisionKind?: TranscriptRevision['revisionKind'];
+  basedOnRevisionId?: string;
 }): Story {
   const now = new Date().toISOString();
   const previous = story.transcriptRevisions ?? [];
+  const revisionKind = input.revisionKind ?? (input.provider === 'browser-speech-recognition' ? 'raw' : 'improved');
+  const selectedPrevious = [...previous].reverse().find((item) => item.audioFragmentId === input.audioFragmentId && item.selected);
   const revision: TranscriptRevision = {
     id: crypto.randomUUID(),
     audioFragmentId: input.audioFragmentId,
     text: input.text.trim(),
     provider: input.provider,
+    revisionKind,
+    basedOnRevisionId: input.basedOnRevisionId ?? (revisionKind === 'improved' ? selectedPrevious?.id : undefined),
     createdAt: now,
     selected: true,
     verificationStatus: input.verificationStatus ?? (input.provider === 'manual' ? 'confirmed' : 'unverified'),

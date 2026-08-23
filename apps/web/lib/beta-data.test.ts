@@ -42,17 +42,32 @@ describe('safe beta data model', () => {
     expect(second.transcriptRevisions?.filter((item) => item.selected).map((item) => item.text)).toEqual(['Вторая версия.']);
   });
 
-  it('keeps the voice-answer question link when retranscribing the same audio', () => {
+  it('preserves the raw voice answer and its question chain when quality STT adds an improved revision', () => {
     const story = makeStory({ sourceText: 'Первый ответ.', sourceMode: 'voice', answers: [] });
     const withAudio = { ...story, audioFragments: [{ id: 'answer-audio', position: 1, createdAt: story.createdAt, contentType: 'audio/webm' as const, uploadStatus: 'saved' as const }] };
-    const first = appendTranscriptRevision(withAudio, { audioFragmentId: 'answer-audio', text: 'Первая версия ответа.', provider: 'manual', questionId: 'question-2' });
-    const second = appendTranscriptRevision(first, { audioFragmentId: 'answer-audio', text: 'Исправленная версия ответа.', provider: 'manual', questionId: 'question-2' });
+    const first = appendTranscriptRevision(withAudio, {
+      audioFragmentId: 'answer-audio',
+      text: 'первая версия ответа без пунктуации',
+      provider: 'browser-speech-recognition',
+      questionId: 'question-2',
+      verificationStatus: 'unverified',
+    });
+    const second = appendTranscriptRevision(first, {
+      audioFragmentId: 'answer-audio',
+      text: 'Первая версия ответа без пунктуации.',
+      provider: 'production-stt',
+      revisionKind: 'improved',
+      questionId: 'question-2',
+    });
+    const [raw, improved] = second.transcriptRevisions ?? [];
     expect(second.transcriptRevisions?.map((item) => item.audioFragmentId)).toEqual(['answer-audio', 'answer-audio']);
-    expect(second.transcriptRevisions?.map((item) => item.text)).toEqual(['Первая версия ответа.', 'Исправленная версия ответа.']);
+    expect(second.transcriptRevisions?.map((item) => item.text)).toEqual(['первая версия ответа без пунктуации', 'Первая версия ответа без пунктуации.']);
+    expect(raw).toMatchObject({ provider: 'browser-speech-recognition', revisionKind: 'raw', selected: false, verificationStatus: 'unverified' });
+    expect(improved).toMatchObject({ provider: 'production-stt', revisionKind: 'improved', basedOnRevisionId: raw.id, selected: true });
     expect(second.sources.at(-1)).toMatchObject({
       questionId: 'question-2',
       audioFragmentId: 'answer-audio',
-      transcriptRevisionId: second.transcriptRevisions?.at(-1)?.id,
+      transcriptRevisionId: improved.id,
     });
   });
 
@@ -61,7 +76,22 @@ describe('safe beta data model', () => {
     const withAudio = { ...story, audioFragments: [{ id: 'long-audio', position: 1, createdAt: story.createdAt, contentType: 'audio/webm' as const, uploadStatus: 'saved' as const, recognitionStatus: 'incomplete' as const }] };
     const next = appendTranscriptRevision(withAudio, { audioFragmentId: 'long-audio', text: 'Начало записи.', provider: 'browser-speech-recognition', verificationStatus: 'unverified', completenessStatus: 'incomplete' });
     expect(next.audioFragments?.[0].recognitionStatus).toBe('incomplete');
-    expect(next.transcriptRevisions?.[0]).toMatchObject({ audioFragmentId: 'long-audio', verificationStatus: 'unverified', completenessStatus: 'incomplete' });
+    expect(next.transcriptRevisions?.[0]).toMatchObject({ audioFragmentId: 'long-audio', revisionKind: 'raw', verificationStatus: 'unverified', completenessStatus: 'incomplete' });
+  });
+
+  it('backfills raw classification for an already saved browser transcript without changing it', () => {
+    const state = createEmptyState();
+    const story = makeStory({ sourceText: 'Начало записи.', sourceMode: 'voice', answers: [] });
+    const savedBeforeRawKinds = {
+      ...state,
+      stories: [{
+        ...story,
+        audioFragments: [{ id: 'stored-audio', position: 1, createdAt: story.createdAt, contentType: 'audio/webm' as const, uploadStatus: 'saved' as const }],
+        transcriptRevisions: [{ id: 'stored-revision', audioFragmentId: 'stored-audio', text: 'текст без пунктуации', provider: 'browser-speech-recognition' as const, createdAt: story.createdAt, selected: true, verificationStatus: 'unverified' as const, completenessStatus: 'complete' as const }],
+      }],
+    } as unknown as Parameters<typeof migrateLegacyState>[0];
+    const migrated = migrateLegacyState(savedBeforeRawKinds).state.stories[0].transcriptRevisions?.[0];
+    expect(migrated).toMatchObject({ id: 'stored-revision', text: 'текст без пунктуации', provider: 'browser-speech-recognition', revisionKind: 'raw', selected: true });
   });
 
   it('persists an unfinished voice draft without turning it into a finished book story', () => {
@@ -95,7 +125,7 @@ describe('safe beta data model', () => {
     const result = migrateLegacyState(legacy);
     expect(result.state.stories).toHaveLength(1);
     expect(result.state.stories[0].audioFragments?.[0].objectKey).toBe('owner/story.webm');
-    expect(result.state.stories[0].transcriptRevisions?.[0].text).toBe('Старая расшифровка.');
+    expect(result.state.stories[0].transcriptRevisions?.[0]).toMatchObject({ text: 'Старая расшифровка.', revisionKind: 'improved' });
     expect(result.migratedStoryIds).toHaveLength(1);
   });
 });

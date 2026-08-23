@@ -35,7 +35,7 @@ async function hydrateState(db: D1Database, userId: string, book: StateRow): Pro
   const shell = JSON.parse(book.state_json) as Omit<AppState, 'stories'>;
   const result = await db.prepare('SELECT story_id, payload_json, record_version FROM beta_stories WHERE user_id = ? ORDER BY created_at ASC').bind(userId).all<StoryRow>();
   const stories = (result.results ?? []).map((row) => ({ ...JSON.parse(row.payload_json) as Story, recordVersion: row.record_version }));
-  return { ...shell, version: 3, stories, stateVersion: book.state_version, updatedAt: book.updated_at } as AppState;
+  return migrateLegacyState({ ...shell, version: 3, stories, stateVersion: book.state_version, updatedAt: book.updated_at } as AppState).state;
 }
 
 function stateShell(state: AppState) {

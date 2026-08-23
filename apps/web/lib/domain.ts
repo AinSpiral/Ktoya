@@ -2,6 +2,8 @@ export type StorySourceKind = 'typed' | 'transcript' | 'interview-answer' | 'man
 export type StoryStyle = 'natural' | 'warm' | 'concise' | 'documentary';
 export type PrivacyLevel = 'private' | 'selected' | 'book';
 export type ChapterKind = 'life-stories' | 'imported-manuscript';
+export type TranscriptProviderKind = 'browser-speech-recognition' | 'manual' | 'production-stt' | 'ai-enhancement';
+export type TranscriptRevisionKind = 'raw' | 'improved';
 
 export interface StorySource {
   id: string;
@@ -17,7 +19,7 @@ export interface StorySource {
 
 export interface Transcript {
   text: string;
-  provider: 'browser-speech-recognition' | 'manual';
+  provider: TranscriptProviderKind;
   confirmed: boolean;
 }
 
@@ -45,7 +47,11 @@ export interface TranscriptRevision {
   id: string;
   audioFragmentId: string;
   text: string;
-  provider: 'browser-speech-recognition' | 'manual';
+  provider: TranscriptProviderKind;
+  /** Raw browser output is immutable evidence; later processing creates an improved revision. */
+  revisionKind: TranscriptRevisionKind;
+  /** An improved transcript declares exactly which preserved version it was derived from. */
+  basedOnRevisionId?: string;
   createdAt: string;
   selected: boolean;
   /** Browser recognition is a draft until the Author explicitly checks it. */
