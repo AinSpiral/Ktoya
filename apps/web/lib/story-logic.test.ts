@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createEmptyState, normalizeAppState } from './domain';
-import { assembleStory, makeStory, startTrial, storyContainsOnlySources } from './story-logic';
+import { assembleStory, makeStory, nextFollowUpQuestion, startTrial, storyContainsOnlySources } from './story-logic';
 
 describe('deterministic story assembly', () => {
   it('does not add a biographical claim', () => {
@@ -22,6 +22,13 @@ describe('deterministic story assembly', () => {
     expect(story.sources.map((source) => source.kind)).toEqual(['typed', 'interview-answer']);
     expect(story.revisions).toHaveLength(1);
     expect(story.privacy).toBe('private');
+  });
+
+  it('offers several non-repeating safe follow-up directions without inventing facts', () => {
+    const first = nextFollowUpQuestion('Я помню этот день.', []);
+    expect(first?.id).toBe('meaning');
+    const second = nextFollowUpQuestion('Я помню этот день.', [{ id: 'a', questionId: first?.id, question: first?.question ?? '', answer: 'Это важно.' }]);
+    expect(second?.id).toBe('people');
   });
 });
 
@@ -53,7 +60,7 @@ describe('book structure compatibility', () => {
       chapters: undefined,
     } as unknown as Parameters<typeof normalizeAppState>[0];
     const normalized = normalizeAppState(legacy);
-    expect(normalized.version).toBe(2);
+    expect(normalized.version).toBe(3);
     expect(normalized.chapters[0].storyIds).toEqual(['story-1']);
     expect(normalized.book.chapterIds).toEqual([normalized.chapters[0].id]);
   });
