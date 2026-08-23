@@ -90,9 +90,10 @@ export async function processCaptureDraftTranscription(input: {
 export async function processStoryNarration(input: {
   story: Story;
   provider: TTSProvider;
+  voiceId: string;
   saveAudio: (narrationId: string, value: NarrationValue) => Promise<string>;
 }): Promise<Story> {
-  let story = queueNarration(input.story, input.provider.id);
+  let story = queueNarration(input.story, input.provider.id, input.voiceId);
   const narration = [...(story.narrations ?? [])].reverse().find((item) =>
     item.provider === input.provider.id && (item.status === 'queued' || item.status === 'processing'));
   if (!narration) return story;
@@ -105,6 +106,7 @@ export async function processStoryNarration(input: {
       const revision = story.revisions.find((item) => item.id === narration.storyRevisionId);
       if (!revision) return failNarration(story, narration.id, { code: 'revision_unavailable', message: 'Версия истории не найдена; исходный текст не изменён.' });
       story = markNarrationProcessing(story, narration.id);
+      if (!narration.voiceId) return failNarration(story, narration.id, { code: 'voice_required', message: 'Для озвучки требуется явно выбранный разрешённый голос.' });
       result = await input.provider.submit({ text: revision.text, language: 'ru-RU', voiceId: narration.voiceId });
     }
   } catch (error) {

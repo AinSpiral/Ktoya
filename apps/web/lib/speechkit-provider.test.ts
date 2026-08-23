@@ -52,4 +52,13 @@ describe('Yandex SpeechKit provider contract', () => {
       expect(result.value).toMatchObject({ contentType: 'audio/ogg', durationMs: 1900, voiceId: 'marina' });
     }
   });
+
+  it('rejects a missing or unapproved TTS voice before any external provider request', async () => {
+    const fetcher = vi.fn();
+    const provider = new YandexSpeechKitTTSProvider('hidden-key', { db: authorizedDb('reserved', null, 'tts'), userId: 'user-qa', operationId: 'operation-qa-1', sourceId: 'derived-qa-1' }, fetcher);
+    const baseInput = { text: 'Неперсональный тестовый текст.', language: 'ru-RU' as const };
+    await expect(provider.submit(baseInput as { text: string; language: 'ru-RU'; voiceId: string })).rejects.toThrow('explicitly approved voiceId');
+    await expect(provider.submit({ ...baseInput, voiceId: 'unapproved-voice' })).rejects.toThrow('explicitly approved voiceId');
+    expect(fetcher).not.toHaveBeenCalled();
+  });
 });

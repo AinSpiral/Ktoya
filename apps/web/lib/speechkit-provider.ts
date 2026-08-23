@@ -1,5 +1,6 @@
 import type { ProviderJobResult, TranscriptionProvider, TTSProvider } from './adapters';
 import { requireReservedTrialOperation, requireSubmittedTrialOperation } from './voice-trial-budget';
+import { isSpeechKitTtsVoice } from './speechkit-voice-selection';
 
 const STT_BASE = 'https://stt.api.cloud.yandex.net';
 const TTS_BASE = 'https://tts.api.cloud.yandex.net';
@@ -96,9 +97,10 @@ export class YandexSpeechKitTTSProvider implements TTSProvider {
   readonly id = 'yandex-speechkit-v3';
   constructor(private readonly apiKey: string, private readonly authorization: AuthorizedProviderContext, private readonly fetcher: typeof fetch = fetch) {}
 
-  async submit(input: { text: string; language: 'ru-RU'; voiceId?: string }): Promise<ProviderJobResult<{ audio: ArrayBuffer; contentType: string; durationMs?: number; voiceId?: string }>> {
+  async submit(input: { text: string; language: 'ru-RU'; voiceId: string }): Promise<ProviderJobResult<{ audio: ArrayBuffer; contentType: string; durationMs?: number; voiceId?: string }>> {
+    if (!isSpeechKitTtsVoice(input.voiceId)) throw new Error('SpeechKit TTS requires an explicitly approved voiceId.');
     await requireReservedTrialOperation({ ...this.authorization, kind: 'tts' });
-    const voiceId = input.voiceId ?? 'marina';
+    const voiceId = input.voiceId;
     const response = await this.fetcher(`${TTS_BASE}/tts/v3/utteranceSynthesis`, {
       method: 'POST', headers: { authorization: `Api-Key ${this.apiKey}`, 'content-type': 'application/json' },
       body: JSON.stringify({ text: input.text, hints: [{ voice: voiceId }], outputAudioSpec: { containerAudio: { containerAudioType: 'OGG_OPUS' } }, loudnessNormalizationType: 'LUFS', unsafeMode: input.text.length > 250 }),

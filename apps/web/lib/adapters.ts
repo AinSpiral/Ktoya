@@ -57,7 +57,7 @@ export interface TTSProvider {
   submit(input: {
     text: string;
     language: 'ru-RU';
-    voiceId?: string;
+    voiceId: string;
   }): Promise<ProviderJobResult<{ audio: ArrayBuffer; contentType: string; durationMs?: number; voiceId?: string }>>;
   poll?(externalJobId: string): Promise<ProviderJobResult<{ audio: ArrayBuffer; contentType: string; durationMs?: number; voiceId?: string }>>;
 }

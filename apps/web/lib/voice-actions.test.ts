@@ -73,9 +73,9 @@ describe('voice provider orchestration', () => {
       submit: vi.fn().mockResolvedValue({ status: 'ready', value: { audio: new ArrayBuffer(16), contentType: 'audio/mpeg', durationMs: 12_000, voiceId: 'ru-neutral' } }),
     };
     const saveAudio = vi.fn().mockResolvedValue('owner/story/narration.mp3');
-    const result = await processStoryNarration({ story: story(), provider, saveAudio });
+    const result = await processStoryNarration({ story: story(), provider, voiceId: 'ru-neutral', saveAudio });
 
-    expect(provider.submit).toHaveBeenCalledWith({ text: 'сырой текст', language: 'ru-RU' });
+    expect(provider.submit).toHaveBeenCalledWith({ text: 'сырой текст', language: 'ru-RU', voiceId: 'ru-neutral' });
     expect(saveAudio).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ contentType: 'audio/mpeg', voiceId: 'ru-neutral' }));
     expect(result.narrations?.[0]).toMatchObject({ status: 'ready', storyRevisionId: 'story-revision-1', objectKey: 'owner/story/narration.mp3' });
   });
