@@ -4,7 +4,8 @@ import { speechKitTrialCapabilities } from '@/lib/voice-provider-registry';
 import { readSpeechKitTrialConfig } from '@/lib/voice-trial-config';
 
 export async function GET() {
-  return NextResponse.json(speechKitTrialCapabilities(Boolean(readSpeechKitTrialConfig(env))), {
+  const config = readSpeechKitTrialConfig(env);
+  return NextResponse.json(speechKitTrialCapabilities(Boolean(config), config?.defaultTtsVoice), {
     headers: { 'cache-control': 'no-store' },
   });
 }

@@ -4,6 +4,7 @@ export interface VoiceProviderCapabilities {
   transcription: { available: boolean; retrySavedAudio: boolean; message: string };
   narration: { available: boolean; reusableAudio: boolean; message: string };
   trialQaOnly?: boolean;
+  defaultNarrationVoiceId?: string;
 }
 
 export interface VoiceProviderRegistry {
@@ -31,11 +32,12 @@ export function voiceProviderCapabilities(registry = configuredVoiceProviders())
   };
 }
 
-export function speechKitTrialCapabilities(configured: boolean): VoiceProviderCapabilities {
+export function speechKitTrialCapabilities(configured: boolean, defaultNarrationVoiceId?: string): VoiceProviderCapabilities {
   return configured ? {
     transcription: { available: true, retrySavedAudio: true, message: 'SpeechKit доступен только для новых явно отмеченных неперсональных QA-записей. Оригинал не отправляется: используется отдельный WAV/OGG derived asset.' },
     narration: { available: true, reusableAudio: true, message: 'SpeechKit TTS доступен только для новой неперсональной QA-истории trial.' },
     trialQaOnly: true,
+    defaultNarrationVoiceId,
   } : {
     ...voiceProviderCapabilities(),
     trialQaOnly: true,
