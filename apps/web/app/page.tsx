@@ -5,7 +5,7 @@ import { HeaderAuthAdapter, HttpStorageAdapter, StorageConflictError, browserExp
 import { createEmptyState, normalizeAppState, type AppState, type AudioFragment, type CaptureDraft, type CaptureDraftFragment, type FeedbackEntry, type InterviewAnswer, type PrivacyLevel, type Story, type StoryEditDraft, type StoryStyle } from '@/lib/domain';
 import { MEMORY_QUESTIONS, appendStoryMaterials, appendStoryTextRevision, appendStoryTitleRevision, applyTranscriptRevision, assembleCaptureDraft, deriveStoryTitle, nextFollowUpQuestion, reviseInterviewAnswer, setAudioArchived, sortStoriesNewestFirst, startTrial } from '@/lib/story-logic';
 
-type View = 'landing' | 'first-choice' | 'method' | 'capture' | 'interview' | 'draft' | 'register' | 'workspace';
+type View = 'landing' | 'first-choice' | 'capture' | 'interview' | 'draft' | 'register' | 'workspace';
 type WorkspacePanel = 'book' | 'read' | 'settings' | 'privacy' | 'export' | 'balance' | 'feedback' | 'roadmap';
 type SpeechRecognitionInstance = {
   lang: string;
@@ -27,7 +27,7 @@ const auth = new HeaderAuthAdapter();
 function viewFromLocation(): View {
   if (typeof window === 'undefined') return 'landing';
   const value = window.location.hash.slice(1);
-  return ['landing', 'first-choice', 'method', 'capture', 'interview', 'draft', 'register', 'workspace'].includes(value) ? value as View : 'landing';
+  return ['landing', 'first-choice', 'capture', 'interview', 'draft', 'register', 'workspace'].includes(value) ? value as View : 'landing';
 }
 
 function storedFragment(item: CapturedFragment): CaptureDraftFragment {
@@ -715,8 +715,6 @@ export default function Home() {
   }
 
   if (view === 'first-choice') return <main className="flow-shell"><AppHeader onHome={() => setView('landing')} hasBook={Boolean(appState.stories.length)} onBook={() => openWorkspace()} /><section className="choice-stage"><p className="eyebrow">Первая страница</p><h1>У тебя уже есть история, которую хочется рассказать?</h1><p className="choice-lead">Можно начать с готового воспоминания — или позволить книге бережно помочь его найти.</p><div className="choice-actions"><button className="button-primary" onClick={() => { resetStoryFlow(); setView('capture'); }}>Да, хочу рассказать</button><button className="button-secondary" onClick={() => { resetStoryFlow(); setMemoryQuestion(0); setMemoryPromptMode(true); setView('interview'); }}>Нет, помоги мне вспомнить</button></div><button className="text-button" onClick={() => setView('landing')}>Назад</button></section></main>;
-
-  if (view === 'method') return <main className="flow-shell"><AppHeader onHome={() => setView('landing')} hasBook={Boolean(appState.stories.length)} onBook={() => openWorkspace()} /><section className="choice-stage compact"><p className="eyebrow">Рассказать</p><h1>Голос и текст можно сочетать на одном экране.</h1><button className="button-primary" onClick={() => { resetStoryFlow(); setView('capture'); }}>Продолжить</button><button className="text-button" onClick={() => setView('first-choice')}>Назад</button></section></main>;
 
   if (view === 'capture') {
     const isVoiceAnswer = capturePurpose === 'answer';
