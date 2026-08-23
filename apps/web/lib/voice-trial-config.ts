@@ -1,4 +1,5 @@
 import { ABSOLUTE_TRIAL_CAP_RUB, type VoiceTrialRates } from './voice-trial-budget';
+import { resolveSpeechKitDefaultTtsVoice, type SpeechKitTtsVoice } from './speechkit-voice-selection';
 
 export interface SpeechKitTrialConfig extends VoiceTrialRates {
   enabled: true;
@@ -6,6 +7,7 @@ export interface SpeechKitTrialConfig extends VoiceTrialRates {
   capRub: number;
   tariffVerifiedAt: string;
   keyExpiresAt: string;
+  defaultTtsVoice: SpeechKitTtsVoice;
 }
 
 const REQUIRED_SCOPES = ['yc.ai.speechkitStt.execute', 'yc.ai.speechkitTts.execute'] as const;
@@ -24,8 +26,9 @@ export function readSpeechKitTrialConfig(env: Cloudflare.Env, now = new Date()):
   const verifiedAt = Date.parse(env.KTOYA_SPEECHKIT_TARIFF_VERIFIED_AT ?? '');
   const iamVerifiedAt = Date.parse(env.KTOYA_SPEECHKIT_IAM_VERIFIED_AT ?? '');
   const expiresAt = Date.parse(env.KTOYA_SPEECHKIT_KEY_EXPIRES_AT ?? '');
+  const defaultTtsVoice = resolveSpeechKitDefaultTtsVoice(env.KTOYA_SPEECHKIT_DEFAULT_TTS_VOICE);
   const scopes = (env.KTOYA_SPEECHKIT_KEY_SCOPES ?? '').split(',').map((item) => item.trim()).filter(Boolean).sort();
-  if (!sttRubPerSecond || !ttsRubPer250Chars || !capRub || capRub > ABSOLUTE_TRIAL_CAP_RUB) return null;
+  if (!sttRubPerSecond || !ttsRubPer250Chars || !capRub || capRub > ABSOLUTE_TRIAL_CAP_RUB || !defaultTtsVoice) return null;
   // A paid request requires a same-day account-tariff readback and an unexpired trial key.
   if (!Number.isFinite(verifiedAt) || now.getTime() - verifiedAt > 24 * 60 * 60 * 1000 || verifiedAt > now.getTime()) return null;
   if (!Number.isFinite(iamVerifiedAt) || now.getTime() - iamVerifiedAt > 24 * 60 * 60 * 1000 || iamVerifiedAt > now.getTime()) return null;
@@ -39,5 +42,6 @@ export function readSpeechKitTrialConfig(env: Cloudflare.Env, now = new Date()):
     keyExpiresAt: new Date(expiresAt).toISOString(),
     sttRubPerSecond,
     ttsRubPer250Chars,
+    defaultTtsVoice,
   };
 }

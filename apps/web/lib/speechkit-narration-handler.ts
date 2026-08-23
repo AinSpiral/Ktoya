@@ -6,9 +6,10 @@ import { readSpeechKitTrialConfig } from './voice-trial-config';
 import { estimateTtsRub, markTrialOperation, reserveTrialOperation } from './voice-trial-budget';
 import { completeNarration, failNarration, markNarrationProcessing, queueNarration } from './voice-logic';
 import { qaTrialStoryEligibility } from './voice-trial-policy';
+import { isSpeechKitTtsVoice } from './speechkit-voice-selection';
 
 const PROVIDER_ID = 'yandex-speechkit-v3';
-export const SPEECHKIT_TRIAL_VOICES = ['marina', 'jane', 'dasha', 'julia', 'alexander', 'kirill'] as const;
+export { SPEECHKIT_TTS_VOICES as SPEECHKIT_TRIAL_VOICES } from './speechkit-voice-selection';
 
 function extensionFor(contentType: string) {
   if (contentType === 'audio/mpeg') return 'mp3';
@@ -23,7 +24,8 @@ export async function handleSpeechKitNarration(request: NextRequest, runtimeEnv:
   const config = readSpeechKitTrialConfig(runtimeEnv);
   if (!config) return NextResponse.json({ error: 'provider_not_configured', message: 'SpeechKit trial заблокирован до проверки тарифа billing account и защищённой установки ограниченного ключа.' }, { status: 503 });
   const body = await request.json() as { storyId?: string; voiceId?: string };
-  if (!body.storyId || !body.voiceId || !SPEECHKIT_TRIAL_VOICES.includes(body.voiceId as typeof SPEECHKIT_TRIAL_VOICES[number])) return NextResponse.json({ error: 'storyId and approved trial voiceId are required' }, { status: 400 });
+  const voiceId = body.voiceId ?? config.defaultTtsVoice;
+  if (!body.storyId || !isSpeechKitTtsVoice(voiceId)) return NextResponse.json({ error: 'storyId and approved trial voiceId are required' }, { status: 400 });
   try {
     let state = await loadAuthorState(runtimeEnv.DB, userId);
     if (!state) return NextResponse.json({ error: 'book_not_found' }, { status: 404 });
@@ -32,11 +34,11 @@ export async function handleSpeechKitNarration(request: NextRequest, runtimeEnv:
     if (!qaTrialStoryEligibility(story.externalProcessingPolicy)) return NextResponse.json({ error: 'qa_only', message: 'SpeechKit trial не принимает существующие реальные истории. Ничего не отправлено.' }, { status: 403 });
     const revision = story.revisions.at(-1);
     if (!revision || !revision.text.trim()) return NextResponse.json({ error: 'story_revision_required' }, { status: 409 });
-    let narration = [...(story.narrations ?? [])].reverse().find((item) => item.provider === PROVIDER_ID && item.storyRevisionId === revision.id && item.voiceId === body.voiceId && item.status !== 'failed');
+    let narration = [...(story.narrations ?? [])].reverse().find((item) => item.provider === PROVIDER_ID && item.storyRevisionId === revision.id && item.voiceId === voiceId && item.status !== 'failed');
     if (narration?.status === 'ready') return NextResponse.json(state);
     if (!narration) {
-      story = queueNarration(story, PROVIDER_ID, body.voiceId);
-      narration = [...(story.narrations ?? [])].reverse().find((item) => item.provider === PROVIDER_ID && item.storyRevisionId === revision.id && item.voiceId === body.voiceId)!;
+      story = queueNarration(story, PROVIDER_ID, voiceId);
+      narration = [...(story.narrations ?? [])].reverse().find((item) => item.provider === PROVIDER_ID && item.storyRevisionId === revision.id && item.voiceId === voiceId)!;
       story = { ...story, narrations: story.narrations?.map((item) => item.id === narration!.id ? { ...item, billingOperationId: narration!.id } : item) };
       state = await saveAuthorState(runtimeEnv.DB, userId, { ...state, stories: state.stories.map((item) => item.id === story!.id ? story! : item), updatedAt: story.updatedAt });
       story = state.stories.find((item) => item.id === story!.id)!;
@@ -53,7 +55,7 @@ export async function handleSpeechKitNarration(request: NextRequest, runtimeEnv:
       const provider = new YandexSpeechKitTTSProvider(config.apiKey, { db: runtimeEnv.DB, userId, operationId, sourceId: revision.id });
       story = markNarrationProcessing(story, narration.id);
       try {
-        const result = await provider.submit({ text: revision.text, language: 'ru-RU', voiceId: body.voiceId });
+        const result = await provider.submit({ text: revision.text, language: 'ru-RU', voiceId });
         if (result.status !== 'ready') throw new Error('Unexpected asynchronous TTS result.');
         const key = `${userId}/${story.id}/narrations/${narration.id}.${extensionFor(result.value.contentType)}`;
         await runtimeEnv.STORY_MEDIA.put(key, result.value.audio, { httpMetadata: { contentType: result.value.contentType } });

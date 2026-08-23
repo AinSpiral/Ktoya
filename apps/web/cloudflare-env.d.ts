@@ -12,6 +12,7 @@ declare global {
       KTOYA_SPEECHKIT_STT_RUB_PER_SECOND?: string;
       KTOYA_SPEECHKIT_TTS_RUB_PER_UNIT?: string;
       KTOYA_SPEECHKIT_TRIAL_CAP_RUB?: string;
+      KTOYA_SPEECHKIT_DEFAULT_TTS_VOICE?: string;
     }
   }
 
@@ -27,6 +28,7 @@ declare global {
     KTOYA_SPEECHKIT_STT_RUB_PER_SECOND?: string;
     KTOYA_SPEECHKIT_TTS_RUB_PER_UNIT?: string;
     KTOYA_SPEECHKIT_TRIAL_CAP_RUB?: string;
+    KTOYA_SPEECHKIT_DEFAULT_TTS_VOICE?: string;
   }
 }
 

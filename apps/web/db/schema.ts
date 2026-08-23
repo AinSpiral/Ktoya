@@ -16,3 +16,31 @@ export const betaSchema = [
   `CREATE TABLE IF NOT EXISTS voice_trial_operations (operation_id TEXT PRIMARY KEY, user_id TEXT NOT NULL, kind TEXT NOT NULL, source_id TEXT NOT NULL, qa_nonpersonal INTEGER NOT NULL CHECK (qa_nonpersonal = 1), max_cost_microrub INTEGER NOT NULL, status TEXT NOT NULL, external_job_id TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
   `CREATE INDEX IF NOT EXISTS idx_voice_trial_operations_user ON voice_trial_operations(user_id, created_at)`,
 ] as const;
+
+export type SchemaCompatibilityUpgrade = {
+  column: string;
+  sql: string;
+};
+
+/**
+ * `CREATE TABLE IF NOT EXISTS` does not add columns to an older local table.
+ * Keep this upgrade append-only: existing trial evidence must never be rebuilt
+ * or discarded merely because a newer reservation guard needs more metadata.
+ */
+export function voiceTrialCompatibilityUpgrades(columns: Iterable<string>): SchemaCompatibilityUpgrade[] {
+  const existing = new Set(columns);
+  const upgrades: SchemaCompatibilityUpgrade[] = [];
+  if (!existing.has('source_id')) {
+    upgrades.push({
+      column: 'source_id',
+      sql: 'ALTER TABLE voice_trial_operations ADD COLUMN source_id TEXT',
+    });
+  }
+  if (!existing.has('qa_nonpersonal')) {
+    upgrades.push({
+      column: 'qa_nonpersonal',
+      sql: 'ALTER TABLE voice_trial_operations ADD COLUMN qa_nonpersonal INTEGER',
+    });
+  }
+  return upgrades;
+}
