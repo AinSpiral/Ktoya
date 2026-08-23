@@ -7,6 +7,20 @@
 
 # [Не выпущено]
 
+## 23.08.2026 — PR #12: provider-independent AI Story Core
+
+### Добавлено
+- Динамическое интервью `ASK / READY`, сборка истории по текущим sources, preview `Сейчас / Предлагается`, явные Apply/Keep, exact-match patch и append-only Undo.
+- Заменяемые Alice AI и deterministic providers со строгими schemas, повторной server-side validation, current-story isolation и безопасной серверной формулировкой вопроса.
+- Аддитивный D1 budget ledger с reservation до provider request, отдельными `completed / failed / uncertain`, запретом автоматического повтора неопределённых платных операций и лимитами 60/100 ₽.
+- Закрытый localhost-only QA gate для новых неперсональных материалов; реальные и legacy-истории внешнему LLM не разрешены.
+- Server-side gate дополнительно требует защищённый QA user ID и loopback hostname: пользовательский AppState-флаг не может самостоятельно открыть внешний provider.
+
+### Фактическая проверка
+- На синтетических сценариях проверены полноценный, слабый и противоречивый рассказ, «не помню», длинный хаотичный текст, ранняя сборка, rephrase, patch и Undo.
+- Trial использовал 17 provider requests: 14 completed, 2 known failed и 1 uncertain; budget-accounted total 10,581802 ₽. Автоматических платных retries не было.
+- Production migration не запускалась; публичная Beta и обработка реальных личных историй этим PR не разрешены.
+
 ## 23.08.2026 — human TTS acceptance и Beta default `marina`
 
 ### Изменено

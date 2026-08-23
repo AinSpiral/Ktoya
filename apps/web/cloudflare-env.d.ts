@@ -13,6 +13,21 @@ declare global {
       KTOYA_SPEECHKIT_TTS_RUB_PER_UNIT?: string;
       KTOYA_SPEECHKIT_TRIAL_CAP_RUB?: string;
       KTOYA_SPEECHKIT_DEFAULT_TTS_VOICE?: string;
+      KTOYA_AI_TRIAL_ENABLED?: string;
+      KTOYA_AI_API_KEY?: string;
+      KTOYA_AI_QA_USER_ID?: string;
+      KTOYA_AI_FOLDER_ID?: string;
+      KTOYA_AI_MODEL?: string;
+      KTOYA_AI_KEY_EXPIRES_AT?: string;
+      KTOYA_AI_KEY_SCOPES?: string;
+      KTOYA_AI_IAM_VERIFIED_AT?: string;
+      KTOYA_AI_TARIFF_VERIFIED_AT?: string;
+      KTOYA_AI_BILLING_VERIFIED_AT?: string;
+      KTOYA_AI_BILLING_ACTIVE?: string;
+      KTOYA_AI_INPUT_RUB_PER_1K_TOKENS?: string;
+      KTOYA_AI_OUTPUT_RUB_PER_1K_TOKENS?: string;
+      KTOYA_AI_WORKING_CAP_RUB?: string;
+      KTOYA_AI_ABSOLUTE_CAP_RUB?: string;
     }
   }
 
@@ -29,6 +44,21 @@ declare global {
     KTOYA_SPEECHKIT_TTS_RUB_PER_UNIT?: string;
     KTOYA_SPEECHKIT_TRIAL_CAP_RUB?: string;
     KTOYA_SPEECHKIT_DEFAULT_TTS_VOICE?: string;
+    KTOYA_AI_TRIAL_ENABLED?: string;
+    KTOYA_AI_API_KEY?: string;
+    KTOYA_AI_QA_USER_ID?: string;
+    KTOYA_AI_FOLDER_ID?: string;
+    KTOYA_AI_MODEL?: string;
+    KTOYA_AI_KEY_EXPIRES_AT?: string;
+    KTOYA_AI_KEY_SCOPES?: string;
+    KTOYA_AI_IAM_VERIFIED_AT?: string;
+    KTOYA_AI_TARIFF_VERIFIED_AT?: string;
+    KTOYA_AI_BILLING_VERIFIED_AT?: string;
+    KTOYA_AI_BILLING_ACTIVE?: string;
+    KTOYA_AI_INPUT_RUB_PER_1K_TOKENS?: string;
+    KTOYA_AI_OUTPUT_RUB_PER_1K_TOKENS?: string;
+    KTOYA_AI_WORKING_CAP_RUB?: string;
+    KTOYA_AI_ABSOLUTE_CAP_RUB?: string;
   }
 }
 

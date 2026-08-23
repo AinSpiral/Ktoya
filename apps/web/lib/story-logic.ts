@@ -1,4 +1,5 @@
 import type { AppState, AudioFragment, CaptureDraft, CaptureDraftFragment, InterviewAnswer, Story, StorySource, TranscriptRevision } from './domain';
+import { captureFragmentSourceId, captureTypedSourceId } from './ai-story-context';
 
 export const MEMORY_QUESTIONS = [
   'Какое событие вспоминается тебе особенно тепло?',
@@ -127,7 +128,7 @@ function captureTranscriptHistory(item: CaptureDraftFragment, now: string): Tran
     ];
   }
   if (!rawText && !selectedText) return [];
-  const rawId = crypto.randomUUID();
+  const rawId = `transcript:${item.fragment.id}:raw`;
   const completenessStatus = item.fragment.recognitionStatus === 'complete' ? 'complete' as const
     : item.fragment.recognitionStatus === 'processing' || item.fragment.recognitionStatus === 'incomplete' ? 'incomplete' as const
       : 'unavailable' as const;
@@ -144,7 +145,7 @@ function captureTranscriptHistory(item: CaptureDraftFragment, now: string): Tran
       completenessStatus,
     }] : []),
     ...(selectedText && selectedText !== rawText ? [{
-      id: crypto.randomUUID(),
+      id: `transcript:${item.fragment.id}:working`,
       audioFragmentId: item.fragment.id,
       text: selectedText,
       provider: 'manual' as const,
@@ -163,7 +164,7 @@ function captureTranscriptHistory(item: CaptureDraftFragment, now: string): Tran
  * changing its append-only source fragments. This also makes a #draft reload
  * restart-safe before the author has explicitly added the story to the book.
  */
-export function assembleCaptureDraft(capture: Pick<CaptureDraft, 'id' | 'sourceText' | 'answer' | 'interviewAnswers' | 'storyFragments' | 'voiceAnswerDrafts' | 'externalProcessingPolicy'>): Story | null {
+export function assembleCaptureDraft(capture: Pick<CaptureDraft, 'id' | 'sourceText' | 'answer' | 'interviewAnswers' | 'interviewQuestions' | 'storyFragments' | 'voiceAnswerDrafts' | 'externalProcessingPolicy'>): Story | null {
   const voiceText = capture.storyFragments.map((item) => item.transcript.trim()).filter(Boolean).join('\n\n');
   const primaryText = [capture.sourceText.trim(), voiceText].filter(Boolean).join('\n\n');
   if (!primaryText) return null;
@@ -195,6 +196,7 @@ export function assembleCaptureDraft(capture: Pick<CaptureDraft, 'id' | 'sourceT
     ...base,
     externalProcessingPolicy: capture.externalProcessingPolicy,
     interviewAnswers: completeAnswers,
+    interviewQuestions: capture.interviewQuestions,
     // Capture screens number each answer locally.  A finished story needs one
     // unambiguous sequence so the reader never shows several different
     // originals as the same "Audio 1".
@@ -202,10 +204,19 @@ export function assembleCaptureDraft(capture: Pick<CaptureDraft, 'id' | 'sourceT
     transcriptRevisions,
     transcriptionAttempts: allFragments.flatMap(({ item }) => item.transcriptionAttempts ?? []),
     sources: [
-      ...(capture.sourceText.trim() ? [{ id: crypto.randomUUID(), kind: 'typed' as const, text: capture.sourceText.trim(), createdAt: now }] : []),
+      ...(capture.sourceText.trim() ? [{ id: captureTypedSourceId(capture.id), kind: 'typed' as const, text: capture.sourceText.trim(), createdAt: now }] : []),
       ...transcriptRevisions.map((revision) => {
         const questionId = allFragments.find(({ item }) => item.fragment.id === revision.audioFragmentId)?.questionId;
-        return { id: crypto.randomUUID(), kind: 'transcript' as const, text: revision.text, createdAt: now, audioFragmentId: revision.audioFragmentId, transcriptRevisionId: revision.id, questionId };
+        const selectedSourceId = captureFragmentSourceId(revision.audioFragmentId);
+        return {
+          id: revision.selected ? selectedSourceId : `${selectedSourceId}:revision:${revision.id}`,
+          kind: 'transcript' as const,
+          text: revision.text,
+          createdAt: now,
+          audioFragmentId: revision.audioFragmentId,
+          transcriptRevisionId: revision.id,
+          questionId,
+        };
       }),
       ...base.sources.filter((item) => item.kind === 'interview-answer').map((item) => {
         const answerItem = completeAnswers.find((candidate) => candidate.id === item.id);
@@ -220,11 +231,12 @@ export function appendStoryTextRevision(story: Story, text: string): Story {
   const nextText = text.trim();
   if (!nextText || nextText === story.text) return story;
   const now = new Date().toISOString();
+  const previousRevisionId = story.revisions.at(-1)?.id;
   return {
     ...story,
     text: nextText,
     updatedAt: now,
-    revisions: [...story.revisions, { id: crypto.randomUUID(), text: nextText, createdAt: now, reason: 'manual-edit' }],
+    revisions: [...story.revisions, { id: crypto.randomUUID(), text: nextText, createdAt: now, reason: 'manual-edit', basedOnRevisionId: previousRevisionId }],
     sources: [...story.sources, { id: crypto.randomUUID(), kind: 'manual-edit', text: nextText, createdAt: now }],
   };
 }
@@ -315,11 +327,12 @@ export function applyTranscriptRevision(story: Story, input: Parameters<typeof a
   });
   const nextText = replaceContributionSafely(revised.text, previousSelected?.text ?? '', selected.text);
   const now = revised.updatedAt;
+  const previousStoryRevisionId = revised.revisions.at(-1)?.id;
   return {
     ...revised,
     text: nextText,
     interviewAnswers,
-    revisions: [...revised.revisions, { id: crypto.randomUUID(), text: nextText, createdAt: now, reason: 'manual-edit' }],
+    revisions: [...revised.revisions, { id: crypto.randomUUID(), text: nextText, createdAt: now, reason: 'manual-edit', basedOnRevisionId: previousStoryRevisionId }],
   };
 }
 
@@ -333,6 +346,7 @@ export function reviseInterviewAnswer(story: Story, answerId: string, text: stri
     return applyTranscriptRevision(story, { audioFragmentId: audioIds[0], text: nextText, provider: 'manual', questionId: answer.questionId });
   }
   const now = new Date().toISOString();
+  const previousStoryRevisionId = story.revisions.at(-1)?.id;
   const visibleText = replaceContributionSafely(story.text, answer.answer, nextText);
   return {
     ...story,
@@ -340,7 +354,7 @@ export function reviseInterviewAnswer(story: Story, answerId: string, text: stri
     updatedAt: now,
     interviewAnswers: story.interviewAnswers.map((item) => item.id === answerId ? { ...item, answer: nextText } : item),
     sources: [...story.sources, { id: crypto.randomUUID(), kind: 'manual-edit', text: nextText, createdAt: now, questionId: answer.questionId }],
-    revisions: [...story.revisions, { id: crypto.randomUUID(), text: visibleText, createdAt: now, reason: 'manual-edit' }],
+    revisions: [...story.revisions, { id: crypto.randomUUID(), text: visibleText, createdAt: now, reason: 'manual-edit', basedOnRevisionId: previousStoryRevisionId }],
   };
 }
 
@@ -353,6 +367,7 @@ export function appendStoryMaterials(story: Story, input: { operationId: string;
   const transcriptFragments = fragments.filter((item) => item.transcript.trim() || item.rawTranscript?.trim());
   if (!typed && !fragments.length) return story;
   const now = new Date().toISOString();
+  const previousStoryRevisionId = story.revisions.at(-1)?.id;
   const startPosition = story.audioFragments?.length ?? 0;
   const revisions = transcriptFragments.flatMap((item) => captureTranscriptHistory(item, now));
   const additions = [typed, ...transcriptFragments.map((item) => item.transcript.trim())].filter(Boolean);
@@ -370,7 +385,7 @@ export function appendStoryMaterials(story: Story, input: { operationId: string;
     transcriptRevisions: [...(story.transcriptRevisions ?? []), ...revisions],
     transcriptionAttempts: [...(story.transcriptionAttempts ?? []), ...fragments.flatMap((item) => item.transcriptionAttempts ?? [])],
     sources: [...story.sources, ...sources],
-    revisions: [...story.revisions, { id: crypto.randomUUID(), text, createdAt: now, reason: 'manual-edit' }],
+    revisions: [...story.revisions, { id: crypto.randomUUID(), text, createdAt: now, reason: 'manual-edit', basedOnRevisionId: previousStoryRevisionId }],
   };
 }
 

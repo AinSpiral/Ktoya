@@ -139,3 +139,11 @@ Trial реализован как отдельный privacy/billing конту�
 - эксплуатационный мониторинг и incident response.
 
 Отдельными следующими PR должны быть реализованы и фактически проверены: Auth/Account и реальная ownership-модель, книжный PDF/print export, подписка/платёж/AI balance и legal readiness для российского публичного paid Beta. Их текущее отсутствие не расширяет scope PR #10, но исключает заявление «Beta готова».
+
+## 11. AI Story Core PR #12
+
+- Provider-independent `AIProvider` отделяет динамическое интервью, сборку истории, перефразирование и exact-match patch от конкретной модели. При закрытом внешнем gate работает детерминированный fallback без сетевого запроса.
+- Серверный operation handler строит контекст только из sources текущей истории, валидирует structured output повторно, создаёт безопасную формулировку вопроса и сохраняет preview до применения.
+- D1-ledger резервирует максимальную стоимость до provider request. `completed`, `failed` и `uncertain` сохраняются отдельно; неопределённая операция не повторяется автоматически и учитывается по максимальной reservation.
+- Runtime-конфигурация проверяет точные cloud/folder/model/scope, свежесть readback тарифа, billing/IAM, срок ключа и защищённый QA user ID. Даже при пользовательской policy внешний provider открывается только этому ID на loopback hostname; production hostname и иной пользователь fail closed.
+- Миграция `0003_ai_story_core.sql` только добавляет таблицу операций. Production migration в PR #12 не запускалась; существующие StoryRevision, Source, аудио, transcript и provenance не переписываются.

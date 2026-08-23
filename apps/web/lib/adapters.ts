@@ -1,9 +1,62 @@
-import type { AppState, FeedbackEntry } from './domain';
+import type { AIProvenanceSegment, AIStoryPreview, AITargetedPatch, AppState, FeedbackEntry, InterviewQuestionCategory } from './domain';
 import type { VoiceProviderCapabilities } from './voice-provider-registry';
 
+export interface AIStorySourceInput {
+  id: string;
+  kind: 'typed' | 'transcript' | 'interview-answer' | 'manual-edit';
+  text: string;
+  questionId?: string;
+}
+
+export interface AIStoryContextInput {
+  storyId: string;
+  sources: AIStorySourceInput[];
+  askedQuestions: Array<{ questionId: string; question: string; answer?: string }>;
+  currentTitle?: string;
+  currentText?: string;
+  currentRevisionId?: string;
+}
+
+export interface AIUsage {
+  inputTokens: number;
+  outputTokens: number;
+}
+
+export interface AIProviderResult<T> {
+  value: T;
+  model: string;
+  usage: AIUsage;
+}
+
+export type AIInterviewDecision =
+  | { decision: 'ASK'; question: string; anchorQuote: string; category: InterviewQuestionCategory; purpose: string; relatedSourceIds: string[] }
+  | { decision: 'READY'; reason: string };
+
+export interface AIAssemblyProposal {
+  title: string;
+  storyText: string;
+  provenance: AIProvenanceSegment[];
+  uncertainties: string[];
+}
+
+export interface AIRephraseProposal {
+  storyText: string;
+  sourceIds: string[];
+  reason: string;
+}
+
+export interface AIPatchRequest {
+  expectedOldText: string;
+  instruction: string;
+}
+
 export interface AIProvider {
-  assemble(sourceText: string, answers: Array<{ answer: string }>): Promise<string>;
-  mode: 'deterministic' | 'connected';
+  readonly id: string;
+  readonly mode: 'deterministic' | 'connected';
+  nextInterviewStep(input: AIStoryContextInput): Promise<AIProviderResult<AIInterviewDecision>>;
+  assemble(input: AIStoryContextInput): Promise<AIProviderResult<AIAssemblyProposal>>;
+  rephrase(input: AIStoryContextInput): Promise<AIProviderResult<AIRephraseProposal>>;
+  patch(input: AIStoryContextInput, request: AIPatchRequest): Promise<AIProviderResult<AITargetedPatch>>;
 }
 
 /** Live microphone fallback. It never processes an already saved recording. */
@@ -159,6 +212,57 @@ export class HttpVoiceProcessingAdapter {
       throw new Error(detail?.message ?? 'Голосовая операция не завершилась. Исходный материал сохранён.');
     }
     return response.json() as Promise<AppState>;
+  }
+}
+
+export interface AIProviderCapabilities {
+  mode: 'deterministic' | 'connected';
+  provider: string;
+  model: string;
+  trialQaOnly: true;
+  message: string;
+}
+
+export type AIClientResult = {
+  state: AppState;
+  mode?: AIProviderCapabilities['mode'];
+  provider?: string;
+  decision?: ({ decision: 'ASK'; questionId: string; question: string; anchorQuote?: string; category: InterviewQuestionCategory; purpose: string; relatedSourceIds: string[] } | { decision: 'READY'; reason: string });
+  preview?: AIStoryPreview;
+  model?: string;
+  usage?: AIUsage;
+  actualCostRub?: number;
+};
+
+export class HttpAIProcessingAdapter {
+  private headers(contentType?: string) {
+    const headers: Record<string, string> = contentType ? { 'content-type': contentType } : {};
+    if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) headers['x-ktoya-dev-user'] = 'local-development-author';
+    return headers;
+  }
+
+  async capabilities(): Promise<AIProviderCapabilities> {
+    const response = await fetch('/api/ai/capabilities', { cache: 'no-store', headers: this.headers() });
+    if (!response.ok) throw new Error('Не удалось проверить режим AI.');
+    return response.json() as Promise<AIProviderCapabilities>;
+  }
+
+  nextInterviewStep(captureDraftId: string, operationId: string) { return this.post({ action: 'interview-next', captureDraftId, operationId }); }
+  assemble(captureDraftId: string, operationId: string) { return this.post({ action: 'assembly', captureDraftId, operationId }); }
+  rephrase(owner: { storyId?: string; captureDraftId?: string }, operationId: string) { return this.post({ action: 'rephrase', ...owner, operationId }); }
+  patch(owner: { storyId?: string; captureDraftId?: string }, operationId: string, expectedOldText: string, instruction: string) { return this.post({ action: 'patch', ...owner, operationId, expectedOldText, instruction }); }
+  applyPreview(owner: { storyId?: string; captureDraftId?: string }, operationId: string, previewId: string) { return this.post({ action: 'apply-preview', ...owner, operationId, previewId }); }
+  keepOriginal(owner: { storyId?: string; captureDraftId?: string }, operationId: string, previewId: string) { return this.post({ action: 'keep-original', ...owner, operationId, previewId }); }
+  undo(owner: { storyId?: string; captureDraftId?: string }, operationId: string) { return this.post({ action: 'undo', ...owner, operationId }); }
+
+  private async post(body: Record<string, string | undefined>): Promise<AIClientResult> {
+    const response = await fetch('/api/ai/operation', { method: 'POST', headers: this.headers('application/json'), body: JSON.stringify(body) });
+    if (response.status === 409) throw new StorageConflictError((await response.json().catch(() => null) as { message?: string } | null)?.message ?? 'AI-операция уже выполнялась или история изменилась.');
+    if (!response.ok) {
+      const detail = await response.json().catch(() => null) as { message?: string } | null;
+      throw new Error(detail?.message ?? 'AI-предложение не создано. Исходный текст сохранён.');
+    }
+    return response.json() as Promise<AIClientResult>;
   }
 }
 
