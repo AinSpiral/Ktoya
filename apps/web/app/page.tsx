@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { HeaderAuthAdapter, HttpStorageAdapter, StorageConflictError, browserExportAdapter, browserSpeechTranscriptionProvider } from '@/lib/adapters';
 import { createEmptyState, normalizeAppState, type AppState, type AudioFragment, type CaptureDraft, type CaptureDraftFragment, type FeedbackEntry, type InterviewAnswer, type PrivacyLevel, type Story, type StoryStyle } from '@/lib/domain';
-import { MEMORY_QUESTIONS, appendTranscriptRevision, makeStory, markAudioDeleted, markAudioHidden, nextFollowUpQuestion, startTrial } from '@/lib/story-logic';
+import { MEMORY_QUESTIONS, appendTranscriptRevision, assembleCaptureDraft, markAudioDeleted, markAudioHidden, nextFollowUpQuestion, startTrial } from '@/lib/story-logic';
 
 type View = 'landing' | 'first-choice' | 'method' | 'capture' | 'interview' | 'draft' | 'register' | 'workspace';
 type WorkspacePanel = 'book' | 'read' | 'settings' | 'privacy' | 'export' | 'balance' | 'feedback' | 'roadmap';
@@ -112,6 +112,13 @@ export default function Home() {
             setAnswerCapturedFragments(unfinished.answerFragments.map(restoredFragment));
             setVoiceAnswerDrafts(unfinished.voiceAnswerDrafts.map((item) => ({ ...item, fragments: item.fragments.map(restoredFragment) })));
             setCapturePurpose(unfinished.capturePurpose);
+            const restoredDraft = unfinished.assembledDraft ?? assembleCaptureDraft(unfinished);
+            if (viewFromLocation() === 'draft' && restoredDraft) {
+              setDraft(restoredDraft);
+              setDraftText(restoredDraft.text);
+            } else if (viewFromLocation() === 'draft') {
+              setView('capture');
+            }
             setVoiceMessage('Незавершённый рассказ восстановлен. Оригиналы, которые уже были сохранены, можно прослушать и продолжить без потери материала.');
           }
           if (reconciled.trial.endsAt !== saved.trial.endsAt || reconciled.trial.status !== saved.trial.status) void storage.save(reconciled);
@@ -161,6 +168,7 @@ export default function Home() {
       storyFragments: capturedFragments.map(storedFragment),
       answerFragments: answerCapturedFragments.map(storedFragment),
       voiceAnswerDrafts: voiceAnswerDrafts.map((item) => ({ ...item, fragments: item.fragments.map(storedFragment) })),
+      assembledDraft: draft ?? undefined,
       capturePurpose,
       updatedAt: new Date().toISOString(),
     };
@@ -177,7 +185,7 @@ export default function Home() {
       void persist(next);
     }, 350);
     return () => window.clearTimeout(timer);
-  }, [loaded, sourceText, answer, interviewAnswers, capturedFragments, answerCapturedFragments, voiceAnswerDrafts, capturePurpose]);
+  }, [loaded, sourceText, answer, interviewAnswers, capturedFragments, answerCapturedFragments, voiceAnswerDrafts, draft, capturePurpose]);
 
   const selectedStory = useMemo(() => appState.stories.find((story) => story.id === selectedStoryId) ?? appState.stories[0] ?? null, [appState.stories, selectedStoryId]);
   const hasCaptureDraft = Boolean(appState.captureDrafts?.length);
@@ -222,48 +230,15 @@ export default function Home() {
   }
 
   function assemble() {
-    const voiceText = capturedFragments.map((item) => item.transcript.trim()).filter(Boolean).join('\n\n');
-    const primaryText = [sourceText.trim(), voiceText].filter(Boolean).join('\n\n');
-    if (!primaryText.trim()) return;
-    const answers: InterviewAnswer[] = [
-      ...interviewAnswers,
-      ...(answer.trim() ? (() => {
-        const currentQuestion = nextFollowUpQuestion(primaryText, interviewAnswers);
-        return currentQuestion ? [{ id: crypto.randomUUID(), questionId: currentQuestion.id, question: currentQuestion.question, answer: answer.trim(), createdAt: new Date().toISOString() }] : [];
-      })() : []),
-    ];
-    const allFragments = [
-      ...capturedFragments.map((item) => ({ item, questionId: undefined as string | undefined })),
-      ...voiceAnswerDrafts.flatMap((draft) => draft.fragments.map((item) => ({ item, questionId: draft.questionId }))),
-    ];
-    const now = new Date().toISOString();
-    const transcriptRevisions = allFragments.filter(({ item }) => item.transcript.trim()).map(({ item }) => ({
-      id: crypto.randomUUID(), audioFragmentId: item.fragment.id, text: item.transcript.trim(), provider: 'browser-speech-recognition' as const, revisionKind: 'raw' as const, createdAt: now, selected: true, verificationStatus: 'unverified' as const, completenessStatus: item.fragment.recognitionStatus === 'processing' ? 'incomplete' as const : item.fragment.recognitionStatus ?? 'unavailable' as const,
-    }));
-    const revisionByFragmentId = new Map(transcriptRevisions.map((revision) => [revision.audioFragmentId, revision.id]));
-    const completeAnswers = answers.map((answerItem) => {
-      const draftForAnswer = voiceAnswerDrafts.find((draft) => draft.answerId === answerItem.id);
-      if (!draftForAnswer) return answerItem;
-      const audioFragmentIds = draftForAnswer.fragments.map((item) => item.fragment.id);
-      const transcriptRevisionIds = audioFragmentIds.map((id) => revisionByFragmentId.get(id)).filter((id): id is string => Boolean(id));
-      return { ...answerItem, audioFragmentId: audioFragmentIds[0], audioFragmentIds, transcriptRevisionId: transcriptRevisionIds[0], transcriptRevisionIds };
+    const nextDraft = assembleCaptureDraft({
+      id: captureStoryIdRef.current,
+      sourceText,
+      answer,
+      interviewAnswers,
+      storyFragments: capturedFragments.map(storedFragment),
+      voiceAnswerDrafts: voiceAnswerDrafts.map((item) => ({ ...item, fragments: item.fragments.map(storedFragment) })),
     });
-    const generated = makeStory({ sourceText: sourceText.trim() || voiceText, sourceMode: sourceText.trim() ? 'text' : 'voice', answers: completeAnswers, transcriptProvider: capturedFragments.length ? 'browser-speech-recognition' : undefined });
-    const base = { ...generated, id: captureStoryIdRef.current };
-    const nextDraft = {
-      ...base,
-      interviewAnswers: completeAnswers,
-      audioFragments: allFragments.map(({ item }) => item.fragment),
-      transcriptRevisions,
-      sources: [
-        ...base.sources.filter((item) => item.kind === 'typed' || item.kind === 'manual-edit'),
-        ...allFragments.filter(({ item }) => item.transcript.trim()).map(({ item, questionId }) => ({ id: crypto.randomUUID(), kind: 'transcript' as const, text: item.transcript.trim(), createdAt: now, audioFragmentId: item.fragment.id, transcriptRevisionId: revisionByFragmentId.get(item.fragment.id), questionId })),
-        ...base.sources.filter((item) => item.kind === 'interview-answer').map((item) => {
-          const answerItem = completeAnswers.find((candidate) => candidate.id === item.id);
-          return { ...item, questionId: answerItem?.questionId, audioFragmentId: answerItem?.audioFragmentId, transcriptRevisionId: answerItem?.transcriptRevisionId };
-        }),
-      ],
-    };
+    if (!nextDraft) return;
     setDraft(nextDraft);
     setDraftText(nextDraft.text);
     setEditingDraft(false);
@@ -579,7 +554,7 @@ export default function Home() {
       setVoiceMessage('Голосовой ответ сохранён как отдельный исходный материал. Можно ответить на следующий вопрос или собрать историю.');
       setView('interview');
     };
-    return <main className="flow-shell"><AppHeader onHome={() => setView('landing')} hasBook={Boolean(appState.stories.length)} onBook={() => openWorkspace()} /><section className="writing-stage"><p className="eyebrow">{isVoiceAnswer ? 'Ответ на уточняющий вопрос' : 'Рассказать'}</p><h1>{isVoiceAnswer ? question?.question ?? 'Сохрани ответ' : 'Расскажи так, как вспоминается.'}</h1><p className="writing-lead">{isVoiceAnswer ? 'Голос и текст равноправны: всё, что ты скажешь или напишешь, останется отдельным материалом этого вопроса.' : 'Можно говорить, писать или сочетать оба способа. Ничего не нужно выбирать заранее.'}</p><div className="recorder"><button className={recording ? 'record-button active' : 'record-button'} onClick={recording ? stopRecording : startRecording}><span />{recording ? 'Остановить запись' : activeFragments.length ? 'Записать дальше' : 'Начать запись'}</button>{recording && <span className="recording-live">Идёт запись</span>}{voiceMessage && <p className="status-message" role="status">{voiceMessage}</p>}<div className="fragment-list" aria-label="Аудиофрагменты и расшифровки">{activeFragments.map((item) => <article key={item.fragment.id} className="fragment-card"><div><b>Аудио {item.fragment.position}</b><span className={`upload-${item.fragment.uploadStatus}`}>{item.fragment.uploadStatus === 'saved' ? 'оригинал сохранён' : item.fragment.uploadStatus === 'failed' ? 'нужно повторить загрузку' : 'сохраняем оригинал…'}</span></div><audio controls src={item.url} aria-label={`Прослушать аудио ${item.fragment.position}`} /><label>Расшифровка {item.fragment.position}<textarea value={item.transcript} onChange={(event) => updateFragmentTranscript(item.fragment.id, event.target.value)} placeholder="Текст появится автоматически. Если Chrome не вернул или обрезал его, добавь проверенную версию вручную." /></label><p className="status-message">Автоматическая расшифровка — черновик: проверь начало, середину и конец записи перед сохранением.</p>{item.fragment.recognitionStatus === 'incomplete' && <p className="error-text">Chrome не подтвердил конец записи: transcript может быть неполным, оригинал сохранён.</p>}{item.fragment.uploadStatus === 'failed' && <button className="button-secondary" onClick={() => void uploadFragment(item, isVoiceAnswer ? 'answer' : 'story')}>Повторить загрузку аудио</button>}</article>)}</div></div>{!isVoiceAnswer && <><label className="editor-label" htmlFor="source-story">Твоя история</label><textarea id="source-story" className="story-textarea" value={sourceText} onChange={(event) => setSourceText(event.target.value)} placeholder="Например: я до сих пор помню тот день…" /><div className="char-note"><span>{sourceText.trim().length ? 'Черновик хранится на этом экране до сохранения' : 'Можно начать с одного предложения'}</span><span>{sourceText.length} знаков</span></div></>}<div className="flow-actions"><button className="button-secondary" onClick={() => isVoiceAnswer ? setView('interview') : setView('first-choice')}>Назад</button>{isVoiceAnswer ? <button className="button-primary" disabled={!canContinue || !question} onClick={finishVoiceAnswer}>Сохранить голосовой ответ</button> : <><button className="button-secondary" disabled={!canContinue} onClick={assemble}>Собрать историю сейчас</button><button className="button-primary" disabled={!canContinue} onClick={() => setView('interview')}>Уточняющие вопросы</button></>}</div></section></main>;
+    return <main className="flow-shell"><AppHeader onHome={() => setView('landing')} hasBook={Boolean(appState.stories.length)} onBook={() => openWorkspace()} /><section className="writing-stage"><p className="eyebrow">{isVoiceAnswer ? 'Ответ на уточняющий вопрос' : 'Рассказать'}</p><h1>{isVoiceAnswer ? question?.question ?? 'Сохрани ответ' : 'Расскажи так, как вспоминается.'}</h1><p className="writing-lead">{isVoiceAnswer ? 'Голос и текст равноправны: всё, что ты скажешь или напишешь, останется отдельным материалом этого вопроса.' : 'Можно говорить, писать или сочетать оба способа. Ничего не нужно выбирать заранее.'}</p><div className="recorder"><button className={recording ? 'record-button active' : 'record-button'} onClick={recording ? stopRecording : startRecording}><span />{recording ? 'Остановить запись' : activeFragments.length ? 'Записать дальше' : 'Начать запись'}</button>{recording && <span className="recording-live">Идёт запись</span>}{voiceMessage && <p className="status-message" role="status">{voiceMessage}</p>}<div className="fragment-list" aria-label="Аудиофрагменты и расшифровки">{activeFragments.map((item) => <article key={item.fragment.id} className="fragment-card"><div><b>Аудио {item.fragment.position}</b><span className={`upload-${item.fragment.uploadStatus}`}>{item.fragment.uploadStatus === 'saved' ? 'оригинал сохранён' : item.fragment.uploadStatus === 'failed' ? 'нужно повторить загрузку' : 'сохраняем оригинал…'}</span></div>{item.url ? <audio controls src={item.url} aria-label={`Прослушать аудио ${item.fragment.position}`} /> : <p className="status-message">Оригинал пока недоступен для воспроизведения в этой вкладке; расшифровка сохранена и не будет потеряна.</p>}<label>Расшифровка {item.fragment.position}<textarea value={item.transcript} onChange={(event) => updateFragmentTranscript(item.fragment.id, event.target.value)} placeholder="Текст появится автоматически. Если Chrome не вернул или обрезал его, добавь проверенную версию вручную." /></label><p className="status-message">Автоматическая расшифровка — черновик: проверь начало, середину и конец записи перед сохранением.</p>{item.fragment.recognitionStatus === 'incomplete' && <p className="error-text">Chrome не подтвердил конец записи: transcript может быть неполным, оригинал сохранён.</p>}{item.fragment.uploadStatus === 'failed' && <button className="button-secondary" onClick={() => void uploadFragment(item, isVoiceAnswer ? 'answer' : 'story')}>Повторить загрузку аудио</button>}</article>)}</div></div>{!isVoiceAnswer && <><label className="editor-label" htmlFor="source-story">Твоя история</label><textarea id="source-story" className="story-textarea" value={sourceText} onChange={(event) => setSourceText(event.target.value)} placeholder="Например: я до сих пор помню тот день…" /><div className="char-note"><span>{sourceText.trim().length ? 'Черновик хранится на этом экране до сохранения' : 'Можно начать с одного предложения'}</span><span>{sourceText.length} знаков</span></div></>}<div className="flow-actions"><button className="button-secondary" onClick={() => isVoiceAnswer ? setView('interview') : setView('first-choice')}>Назад</button>{isVoiceAnswer ? <button className="button-primary" disabled={!canContinue || !question} onClick={finishVoiceAnswer}>Сохранить голосовой ответ</button> : <><button className="button-secondary" disabled={!canContinue} onClick={assemble}>Собрать историю сейчас</button><button className="button-primary" disabled={!canContinue} onClick={() => setView('interview')}>Уточняющие вопросы</button></>}</div></section></main>;
   }
 
   async function setAudioHidden(story: Story, fragmentId: string, hidden: boolean) {

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createEmptyState } from './domain';
 import { captureDraftMediaKey, recoverPendingCaptureDraftMedia } from './draft-media-recovery';
 import { migrateLegacyState } from './legacy-migration';
-import { appendTranscriptRevision, makeStory, markAudioDeleted, markAudioHidden } from './story-logic';
+import { appendTranscriptRevision, assembleCaptureDraft, makeStory, markAudioDeleted, markAudioHidden } from './story-logic';
 
 describe('safe beta data model', () => {
   it('keeps the first audio fragment when a second one is added', () => {
@@ -126,6 +126,21 @@ describe('safe beta data model', () => {
     const restored = JSON.parse(JSON.stringify(saved)) as typeof saved;
     expect(restored.stories).toHaveLength(0);
     expect(restored.captureDrafts[0].storyFragments[0]).toMatchObject({ transcript: 'Начало записи.', fragment: { id: 'audio-one', objectKey: 'author/capture-one/audio-one.webm', recognitionStatus: 'incomplete' } });
+  });
+
+  it('restores a review draft with voice-answer provenance after reload without changing its sources', () => {
+    const state = createEmptyState();
+    const capture = {
+      id: 'capture-one', sourceText: '', answer: '', capturePurpose: 'story' as const, updatedAt: state.updatedAt,
+      storyFragments: [{ fragment: { id: 'story-audio', position: 1, createdAt: state.updatedAt, contentType: 'audio/webm' as const, uploadStatus: 'saved' as const, objectKey: 'author/capture-one/story-audio.webm', recognitionStatus: 'complete' as const }, transcript: 'Исходный рассказ.' }],
+      answerFragments: [],
+      interviewAnswers: [{ id: 'answer-one', questionId: 'meaning', question: 'Что особенно важно?', answer: 'Голосовой ответ.', audioFragmentId: 'answer-audio', audioFragmentIds: ['answer-audio'] }],
+      voiceAnswerDrafts: [{ answerId: 'answer-one', questionId: 'meaning', question: 'Что особенно важно?', fragments: [{ fragment: { id: 'answer-audio', position: 1, createdAt: state.updatedAt, contentType: 'audio/webm' as const, uploadStatus: 'saved' as const, objectKey: 'author/capture-one/answer-audio.webm', recognitionStatus: 'complete' as const }, transcript: 'Голосовой ответ.' }] }],
+    };
+    const restored = assembleCaptureDraft(capture);
+    expect(restored).toMatchObject({ id: 'capture-one', audioFragments: [{ id: 'story-audio' }, { id: 'answer-audio' }], interviewAnswers: [{ questionId: 'meaning', audioFragmentId: 'answer-audio' }] });
+    expect(restored?.transcriptRevisions?.map((item) => item.audioFragmentId)).toEqual(['story-audio', 'answer-audio']);
+    expect(restored?.sources.some((item) => item.questionId === 'meaning' && item.audioFragmentId === 'answer-audio' && item.transcriptRevisionId)).toBe(true);
   });
 
   it('preserves a legacy story and maps its audio and transcript into linked objects', () => {

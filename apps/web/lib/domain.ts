@@ -97,6 +97,8 @@ export interface CaptureDraft {
   storyFragments: CaptureDraftFragment[];
   answerFragments: CaptureDraftFragment[];
   voiceAnswerDrafts: VoiceAnswerCaptureDraft[];
+  /** The review-stage composition is saved separately from immutable source material. */
+  assembledDraft?: Story;
   capturePurpose: 'story' | 'answer';
   updatedAt: string;
 }

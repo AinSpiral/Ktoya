@@ -1,4 +1,4 @@
-import type { AppState, AudioFragment, InterviewAnswer, Story, StorySource, TranscriptRevision } from './domain';
+import type { AppState, AudioFragment, CaptureDraft, InterviewAnswer, Story, StorySource, TranscriptRevision } from './domain';
 
 export const MEMORY_QUESTIONS = [
   'Какое событие вспоминается тебе особенно тепло?',
@@ -82,6 +82,57 @@ export function makeStory(input: {
     audioFragments: [],
     transcriptRevisions: [],
     status: 'confirmed',
+  };
+}
+
+/**
+ * Builds the review-stage story from a persisted capture draft without
+ * changing its append-only source fragments. This also makes a #draft reload
+ * restart-safe before the author has explicitly added the story to the book.
+ */
+export function assembleCaptureDraft(capture: Pick<CaptureDraft, 'id' | 'sourceText' | 'answer' | 'interviewAnswers' | 'storyFragments' | 'voiceAnswerDrafts'>): Story | null {
+  const voiceText = capture.storyFragments.map((item) => item.transcript.trim()).filter(Boolean).join('\n\n');
+  const primaryText = [capture.sourceText.trim(), voiceText].filter(Boolean).join('\n\n');
+  if (!primaryText) return null;
+
+  const answers: InterviewAnswer[] = [
+    ...capture.interviewAnswers,
+    ...(capture.answer.trim() ? (() => {
+      const currentQuestion = nextFollowUpQuestion(primaryText, capture.interviewAnswers);
+      return currentQuestion ? [{ id: crypto.randomUUID(), questionId: currentQuestion.id, question: currentQuestion.question, answer: capture.answer.trim(), createdAt: new Date().toISOString() }] : [];
+    })() : []),
+  ];
+  const allFragments = [
+    ...capture.storyFragments.map((item) => ({ item, questionId: undefined as string | undefined })),
+    ...capture.voiceAnswerDrafts.flatMap((draft) => draft.fragments.map((item) => ({ item, questionId: draft.questionId }))),
+  ];
+  const now = new Date().toISOString();
+  const transcriptRevisions = allFragments.filter(({ item }) => item.transcript.trim()).map(({ item }) => ({
+    id: crypto.randomUUID(), audioFragmentId: item.fragment.id, text: item.transcript.trim(), provider: 'browser-speech-recognition' as const, revisionKind: 'raw' as const, createdAt: now, selected: true, verificationStatus: 'unverified' as const, completenessStatus: item.fragment.recognitionStatus === 'processing' ? 'incomplete' as const : item.fragment.recognitionStatus ?? 'unavailable' as const,
+  }));
+  const revisionByFragmentId = new Map(transcriptRevisions.map((revision) => [revision.audioFragmentId, revision.id]));
+  const completeAnswers = answers.map((answerItem) => {
+    const draftForAnswer = capture.voiceAnswerDrafts.find((draft) => draft.answerId === answerItem.id);
+    if (!draftForAnswer) return answerItem;
+    const audioFragmentIds = draftForAnswer.fragments.map((item) => item.fragment.id);
+    const transcriptRevisionIds = audioFragmentIds.map((id) => revisionByFragmentId.get(id)).filter((id): id is string => Boolean(id));
+    return { ...answerItem, audioFragmentId: audioFragmentIds[0], audioFragmentIds, transcriptRevisionId: transcriptRevisionIds[0], transcriptRevisionIds };
+  });
+  const generated = makeStory({ sourceText: capture.sourceText.trim() || voiceText, sourceMode: capture.sourceText.trim() ? 'text' : 'voice', answers: completeAnswers, transcriptProvider: capture.storyFragments.length ? 'browser-speech-recognition' : undefined });
+  const base = { ...generated, id: capture.id };
+  return {
+    ...base,
+    interviewAnswers: completeAnswers,
+    audioFragments: allFragments.map(({ item }) => item.fragment),
+    transcriptRevisions,
+    sources: [
+      ...base.sources.filter((item) => item.kind === 'typed' || item.kind === 'manual-edit'),
+      ...allFragments.filter(({ item }) => item.transcript.trim()).map(({ item, questionId }) => ({ id: crypto.randomUUID(), kind: 'transcript' as const, text: item.transcript.trim(), createdAt: now, audioFragmentId: item.fragment.id, transcriptRevisionId: revisionByFragmentId.get(item.fragment.id), questionId })),
+      ...base.sources.filter((item) => item.kind === 'interview-answer').map((item) => {
+        const answerItem = completeAnswers.find((candidate) => candidate.id === item.id);
+        return { ...item, questionId: answerItem?.questionId, audioFragmentId: answerItem?.audioFragmentId, transcriptRevisionId: answerItem?.transcriptRevisionId };
+      }),
+    ],
   };
 }
 
