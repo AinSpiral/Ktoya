@@ -13,4 +13,6 @@ export const betaSchema = [
   `CREATE TABLE IF NOT EXISTS beta_story_revisions (revision_id TEXT PRIMARY KEY, story_id TEXT NOT NULL, payload_json TEXT NOT NULL, created_at TEXT NOT NULL)`,
   `CREATE INDEX IF NOT EXISTS idx_beta_story_revisions_story ON beta_story_revisions(story_id, created_at)`,
   `CREATE TABLE IF NOT EXISTS beta_migration_backups (user_id TEXT NOT NULL, migration_key TEXT NOT NULL, state_json TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY (user_id, migration_key))`,
+  `CREATE TABLE IF NOT EXISTS voice_trial_operations (operation_id TEXT PRIMARY KEY, user_id TEXT NOT NULL, kind TEXT NOT NULL, source_id TEXT NOT NULL, qa_nonpersonal INTEGER NOT NULL CHECK (qa_nonpersonal = 1), max_cost_microrub INTEGER NOT NULL, status TEXT NOT NULL, external_job_id TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
+  `CREATE INDEX IF NOT EXISTS idx_voice_trial_operations_user ON voice_trial_operations(user_id, created_at)`,
 ] as const;

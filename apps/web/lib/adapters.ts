@@ -46,6 +46,7 @@ export interface TranscriptionProvider {
     audio: ArrayBuffer;
     contentType: string;
     language: 'ru-RU';
+    literatureText?: boolean;
   }): Promise<ProviderJobResult<{ text: string }>>;
   poll?(externalJobId: string): Promise<ProviderJobResult<{ text: string }>>;
 }
@@ -66,6 +67,7 @@ export interface StorageAdapter {
   save(state: AppState): Promise<AppState>;
   saveFeedback(entry: FeedbackEntry): Promise<void>;
   saveAudio(storyId: string, fragmentId: string, blob: Blob): Promise<string>;
+  saveDerivedAudio(storyId: string, fragmentId: string, assetId: string, blob: Blob): Promise<string>;
   audioUrl(objectKey: string): string;
 }
 
@@ -113,6 +115,12 @@ export class HttpStorageAdapter implements StorageAdapter {
     const result = await response.json() as { key: string };
     return result.key;
   }
+  async saveDerivedAudio(storyId: string, fragmentId: string, assetId: string, blob: Blob) {
+    const response = await fetch(`/api/media?story=${encodeURIComponent(storyId)}&fragment=${encodeURIComponent(fragmentId)}&asset=${encodeURIComponent(assetId)}&kind=derived`, { method: 'PUT', headers: this.headers(blob.type || 'audio/wav'), body: blob });
+    if (!response.ok) throw new Error('Не удалось сохранить техническую копию записи');
+    const result = await response.json() as { key: string };
+    return result.key;
+  }
   audioUrl(objectKey: string) {
     return `/api/media?key=${encodeURIComponent(objectKey)}`;
   }
@@ -131,16 +139,16 @@ export class HttpVoiceProcessingAdapter {
     return response.json() as Promise<VoiceProviderCapabilities>;
   }
 
-  async transcribe(storyId: string, audioFragmentId: string): Promise<AppState> {
-    return this.post('/api/voice/transcription', { storyId, audioFragmentId });
+  async transcribe(storyId: string, audioFragmentId: string, processingMode: 'faithful' | 'literature-derived' = 'faithful'): Promise<AppState> {
+    return this.post('/api/voice/transcription', { storyId, audioFragmentId, ...(processingMode === 'faithful' ? {} : { processingMode }) });
   }
 
-  async transcribeCaptureDraft(captureDraftId: string, audioFragmentId: string): Promise<AppState> {
-    return this.post('/api/voice/transcription', { captureDraftId, audioFragmentId });
+  async transcribeCaptureDraft(captureDraftId: string, audioFragmentId: string, processingMode: 'faithful' | 'literature-derived' = 'faithful'): Promise<AppState> {
+    return this.post('/api/voice/transcription', { captureDraftId, audioFragmentId, ...(processingMode === 'faithful' ? {} : { processingMode }) });
   }
 
-  async narrate(storyId: string): Promise<AppState> {
-    return this.post('/api/voice/narration', { storyId });
+  async narrate(storyId: string, voiceId?: string): Promise<AppState> {
+    return this.post('/api/voice/narration', { storyId, ...(voiceId ? { voiceId } : {}) });
   }
 
   private async post(path: string, body: Record<string, string>): Promise<AppState> {

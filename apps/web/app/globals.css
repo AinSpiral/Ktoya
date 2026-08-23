@@ -235,6 +235,8 @@ button:disabled { cursor: not-allowed; opacity: .42; transform: none !important;
 .transcription-action { display: grid; gap: 8px; align-items: start; }
 .transcription-action .button-secondary { width: fit-content; }
 .transcription-action p { margin: 0; }
+.qa-trial-consent { display: flex; gap: 10px; align-items: flex-start; margin-bottom: 14px; padding: 12px 14px; border: 1px solid #b89964; border-radius: 14px; background: rgba(255,248,225,.72); color: #55472f; line-height: 1.45; }
+.qa-trial-consent input { width: 20px; height: 20px; flex: 0 0 auto; margin-top: 1px; }
 .title-editor { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; margin: 22px 0; }
 .title-editor h1, .title-editor h2 { margin: 0; overflow-wrap: anywhere; }
 .title-editor label { flex: 1 1 320px; display: grid; gap: 8px; font-weight: 750; }

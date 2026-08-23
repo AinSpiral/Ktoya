@@ -163,7 +163,7 @@ function captureTranscriptHistory(item: CaptureDraftFragment, now: string): Tran
  * changing its append-only source fragments. This also makes a #draft reload
  * restart-safe before the author has explicitly added the story to the book.
  */
-export function assembleCaptureDraft(capture: Pick<CaptureDraft, 'id' | 'sourceText' | 'answer' | 'interviewAnswers' | 'storyFragments' | 'voiceAnswerDrafts'>): Story | null {
+export function assembleCaptureDraft(capture: Pick<CaptureDraft, 'id' | 'sourceText' | 'answer' | 'interviewAnswers' | 'storyFragments' | 'voiceAnswerDrafts' | 'externalProcessingPolicy'>): Story | null {
   const voiceText = capture.storyFragments.map((item) => item.transcript.trim()).filter(Boolean).join('\n\n');
   const primaryText = [capture.sourceText.trim(), voiceText].filter(Boolean).join('\n\n');
   if (!primaryText) return null;
@@ -193,6 +193,7 @@ export function assembleCaptureDraft(capture: Pick<CaptureDraft, 'id' | 'sourceT
   const base = { ...generated, id: capture.id };
   return {
     ...base,
+    externalProcessingPolicy: capture.externalProcessingPolicy,
     interviewAnswers: completeAnswers,
     // Capture screens number each answer locally.  A finished story needs one
     // unambiguous sequence so the reader never shows several different

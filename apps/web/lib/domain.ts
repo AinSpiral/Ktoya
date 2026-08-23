@@ -5,6 +5,22 @@ export type ChapterKind = 'life-stories' | 'imported-manuscript';
 export type TranscriptProviderKind = 'browser-speech-recognition' | 'manual' | 'production-stt' | 'ai-enhancement';
 export type TranscriptRevisionKind = 'raw' | 'improved';
 export type VoiceJobStatus = 'queued' | 'processing' | 'ready' | 'failed';
+export type ExternalVoiceProcessingPolicy = 'qa-nonpersonal-trial' | 'user-content-approved';
+export type AudioDerivationKind = 'remux-ogg-opus' | 'transcode-pcm-wav';
+export type TranscriptProcessingMode = 'faithful' | 'literature-derived';
+
+/** A provider input is a new technical asset; the immutable browser original remains authoritative. */
+export interface DerivedAudioAsset {
+  id: string;
+  sourceAudioFragmentId: string;
+  purpose: 'stt-input';
+  objectKey: string;
+  contentType: 'audio/ogg' | 'audio/wav' | 'audio/mpeg';
+  derivation: AudioDerivationKind;
+  createdAt: string;
+  byteLength: number;
+  durationMs: number;
+}
 
 export interface StorySource {
   id: string;
@@ -47,6 +63,12 @@ export interface AudioFragment {
   deletedAt?: string;
   /** Browser recognition failures are visible; a partial tail is never silently complete. */
   recognitionStatus?: 'processing' | 'complete' | 'incomplete' | 'unavailable';
+  /** Measured locally and used for a conservative pre-call billing reservation. */
+  durationMs?: number;
+  /** Absent for all historical/personal material, which therefore cannot enter the trial provider. */
+  externalProcessingPolicy?: ExternalVoiceProcessingPolicy;
+  /** Append-only technical derivatives; never replace or delete the WebM/Opus original. */
+  derivedAssets?: DerivedAudioAsset[];
 }
 
 /** A recognition attempt is append-only; one revision can be selected for reading. */
@@ -64,6 +86,8 @@ export interface TranscriptRevision {
   /** Browser recognition is a draft until the Author explicitly checks it. */
   verificationStatus?: 'unverified' | 'confirmed';
   completenessStatus?: 'complete' | 'incomplete' | 'unavailable';
+  /** Faithful STT is canonical; literature output is always a separate non-destructive layer. */
+  processingMode?: TranscriptProcessingMode;
 }
 
 /**
@@ -86,6 +110,10 @@ export interface TranscriptionAttempt {
   errorCode?: string;
   /** Safe user-facing detail only; provider payloads and secrets are never stored here. */
   errorMessage?: string;
+  processingMode?: TranscriptProcessingMode;
+  derivedAudioAssetId?: string;
+  /** Deterministic billable-operation key used to prevent accidental duplicate submission. */
+  billingOperationId?: string;
 }
 
 export interface InterviewAnswer {
@@ -126,6 +154,7 @@ export interface StoryNarration {
   voiceId?: string;
   errorCode?: string;
   errorMessage?: string;
+  billingOperationId?: string;
 }
 
 /** Read-only compatibility shape from the pre-provider Beta. */
@@ -181,6 +210,7 @@ export interface CaptureDraft {
   /** The review-stage composition is saved separately from immutable source material. */
   assembledDraft?: Story;
   capturePurpose: 'story' | 'answer';
+  externalProcessingPolicy?: ExternalVoiceProcessingPolicy;
   updatedAt: string;
 }
 
@@ -216,6 +246,8 @@ export interface Story {
   narrations?: StoryNarration[];
   /** Kept only so a legacy record can be migrated without guessing data. */
   audioKey?: string;
+  /** Explicit opt-in attached only to newly created nonpersonal trial stories. */
+  externalProcessingPolicy?: ExternalVoiceProcessingPolicy;
 }
 
 export interface Author {

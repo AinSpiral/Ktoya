@@ -105,7 +105,7 @@ export async function processStoryNarration(input: {
       const revision = story.revisions.find((item) => item.id === narration.storyRevisionId);
       if (!revision) return failNarration(story, narration.id, { code: 'revision_unavailable', message: 'Версия истории не найдена; исходный текст не изменён.' });
       story = markNarrationProcessing(story, narration.id);
-      result = await input.provider.submit({ text: revision.text, language: 'ru-RU' });
+      result = await input.provider.submit({ text: revision.text, language: 'ru-RU', voiceId: narration.voiceId });
     }
   } catch (error) {
     return failNarration(story, narration.id, safeFailure(error, 'Озвучка не завершилась. Текст истории сохранён; генерацию можно повторить.'));

@@ -231,11 +231,11 @@ export function failTranscription(story: Story, attemptId: string, error: { code
 }
 
 /** Queues one cached narration per provider and exact StoryRevision. */
-export function queueNarration(story: Story, provider: string): Story {
+export function queueNarration(story: Story, provider: string, voiceId?: string): Story {
   const storyRevisionId = currentStoryRevisionId(story);
   if (!storyRevisionId || !story.text.trim()) return story;
   const narrations = story.narrations ?? [];
-  const existing = narrations.find((item) => item.provider === provider && item.storyRevisionId === storyRevisionId && item.status !== 'failed');
+  const existing = narrations.find((item) => item.provider === provider && item.storyRevisionId === storyRevisionId && (voiceId === undefined || item.voiceId === voiceId) && item.status !== 'failed');
   if (existing) return story;
   const now = new Date().toISOString();
   const narration: StoryNarration = {
@@ -245,6 +245,7 @@ export function queueNarration(story: Story, provider: string): Story {
     status: 'queued',
     createdAt: now,
     updatedAt: now,
+    voiceId,
   };
   return { ...story, narrations: [...narrations, narration], updatedAt: now };
 }

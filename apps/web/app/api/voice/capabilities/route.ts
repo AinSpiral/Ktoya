@@ -1,8 +1,10 @@
+import { env } from 'cloudflare:workers';
 import { NextResponse } from 'next/server';
-import { voiceProviderCapabilities } from '@/lib/voice-provider-registry';
+import { speechKitTrialCapabilities } from '@/lib/voice-provider-registry';
+import { readSpeechKitTrialConfig } from '@/lib/voice-trial-config';
 
 export async function GET() {
-  return NextResponse.json(voiceProviderCapabilities(), {
+  return NextResponse.json(speechKitTrialCapabilities(Boolean(readSpeechKitTrialConfig(env))), {
     headers: { 'cache-control': 'no-store' },
   });
 }
