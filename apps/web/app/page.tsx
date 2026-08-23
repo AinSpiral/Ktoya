@@ -356,12 +356,17 @@ export default function Home() {
       let savedItem: CapturedFragment | null = null;
       const updateSavedItem = (patch: { transcript?: string; recognitionStatus?: NonNullable<AudioFragment['recognitionStatus']> }) => {
         if (!savedItem) return;
-        savedItem = {
-          ...savedItem,
-          transcript: patch.transcript ?? savedItem.transcript,
-          fragment: { ...savedItem.fragment, ...(patch.recognitionStatus ? { recognitionStatus: patch.recognitionStatus } : {}) },
-        };
-        const apply = (items: CapturedFragment[]) => items.map((item) => item.fragment.id === savedItem?.fragment.id ? savedItem : item);
+        const fragmentId = savedItem.fragment.id;
+        const apply = (items: CapturedFragment[]) => items.map((item) => {
+          if (item.fragment.id !== fragmentId) return item;
+          const next = {
+            ...item,
+            transcript: patch.transcript ?? item.transcript,
+            fragment: { ...item.fragment, ...(patch.recognitionStatus ? { recognitionStatus: patch.recognitionStatus } : {}) },
+          };
+          savedItem = next;
+          return next;
+        });
         if (purpose === 'answer') setAnswerCapturedFragments(apply);
         else setCapturedFragments(apply);
       };

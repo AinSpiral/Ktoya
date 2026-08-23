@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createEmptyState } from './domain';
+import { captureDraftMediaKey, recoverPendingCaptureDraftMedia } from './draft-media-recovery';
 import { migrateLegacyState } from './legacy-migration';
 import { appendTranscriptRevision, makeStory, markAudioDeleted, markAudioHidden } from './story-logic';
 
@@ -92,6 +93,18 @@ describe('safe beta data model', () => {
     } as unknown as Parameters<typeof migrateLegacyState>[0];
     const migrated = migrateLegacyState(savedBeforeRawKinds).state.stories[0].transcriptRevisions?.[0];
     expect(migrated).toMatchObject({ id: 'stored-revision', text: 'текст без пунктуации', provider: 'browser-speech-recognition', revisionKind: 'raw', selected: true });
+  });
+
+  it('recovers a pending draft fragment only when its original is confirmed in storage', async () => {
+    const state = createEmptyState();
+    const draftId = 'capture-one';
+    const pending = { id: 'audio-pending', position: 1, createdAt: state.updatedAt, contentType: 'audio/webm' as const, uploadStatus: 'pending' as const, recognitionStatus: 'complete' as const };
+    const absent = { id: 'audio-absent', position: 2, createdAt: state.updatedAt, contentType: 'audio/webm' as const, uploadStatus: 'pending' as const, recognitionStatus: 'complete' as const };
+    const saved = { ...state, captureDrafts: [{ id: draftId, sourceText: '', answer: '', interviewAnswers: [], storyFragments: [{ fragment: pending, transcript: 'Сохранённый текст.' }, { fragment: absent, transcript: 'Текст без оригинала.' }], answerFragments: [], voiceAnswerDrafts: [], capturePurpose: 'story' as const, updatedAt: state.updatedAt }] };
+    const key = captureDraftMediaKey('author-one', draftId, pending.id);
+    const recovered = await recoverPendingCaptureDraftMedia(saved, 'author-one', async (candidate) => candidate === key);
+    expect(recovered.captureDrafts?.[0].storyFragments[0]).toMatchObject({ transcript: 'Сохранённый текст.', fragment: { id: pending.id, uploadStatus: 'saved', objectKey: key, recognitionStatus: 'complete' } });
+    expect(recovered.captureDrafts?.[0].storyFragments[1]).toMatchObject({ transcript: 'Текст без оригинала.', fragment: { id: absent.id, uploadStatus: 'pending' } });
   });
 
   it('persists an unfinished voice draft without turning it into a finished book story', () => {
