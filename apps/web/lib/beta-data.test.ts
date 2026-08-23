@@ -175,6 +175,47 @@ describe('safe beta data model', () => {
     }
   });
 
+  it('keeps browser raw text when the author corrects a capture before assembling the story', () => {
+    const state = createEmptyState();
+    const story = assembleCaptureDraft({
+      id: 'raw-before-review', sourceText: '', answer: '', interviewAnswers: [], voiceAnswerDrafts: [],
+      storyFragments: [{
+        fragment: { id: 'raw-audio', position: 1, createdAt: state.updatedAt, contentType: 'audio/webm', uploadStatus: 'saved', objectKey: 'author/raw/raw-audio.webm', recognitionStatus: 'complete' },
+        rawTranscript: 'браузер распознал без пунктуации',
+        transcript: 'Браузер распознал текст с ручной пунктуацией.',
+      }],
+    })!;
+    const revisions = story.transcriptRevisions?.filter((item) => item.audioFragmentId === 'raw-audio') ?? [];
+
+    expect(revisions).toHaveLength(2);
+    expect(revisions[0]).toMatchObject({ provider: 'browser-speech-recognition', revisionKind: 'raw', selected: false, text: 'браузер распознал без пунктуации' });
+    expect(revisions[1]).toMatchObject({ provider: 'manual', basedOnRevisionId: revisions[0].id, selected: true, text: 'Браузер распознал текст с ручной пунктуацией.' });
+    expect(story.sources.filter((item) => item.audioFragmentId === 'raw-audio').map((item) => item.transcriptRevisionId)).toEqual(revisions.map((item) => item.id));
+    expect(story.text).toBe('Браузер распознал текст с ручной пунктуацией.');
+  });
+
+  it('transfers capture-stage production revisions and attempts into the story without recreating provenance', () => {
+    const state = createEmptyState();
+    const story = assembleCaptureDraft({
+      id: 'production-before-review', sourceText: '', answer: '', interviewAnswers: [], voiceAnswerDrafts: [],
+      storyFragments: [{
+        fragment: { id: 'production-audio', position: 1, createdAt: state.updatedAt, contentType: 'audio/webm', uploadStatus: 'saved', objectKey: 'author/production/audio.webm', recognitionStatus: 'complete' },
+        rawTranscript: 'браузерный текст',
+        transcript: 'Качественная расшифровка.',
+        transcriptRevisions: [
+          { id: 'raw-production', audioFragmentId: 'production-audio', text: 'браузерный текст', provider: 'browser-speech-recognition', revisionKind: 'raw', createdAt: state.updatedAt, selected: false, verificationStatus: 'unverified', completenessStatus: 'complete' },
+          { id: 'stt-production', audioFragmentId: 'production-audio', text: 'Качественная расшифровка.', provider: 'production-stt', revisionKind: 'improved', basedOnRevisionId: 'raw-production', createdAt: state.updatedAt, selected: true, verificationStatus: 'unverified', completenessStatus: 'complete' },
+        ],
+        transcriptionAttempts: [{ id: 'attempt-production', audioFragmentId: 'production-audio', provider: 'provider-a', status: 'ready', basedOnRevisionId: 'raw-production', resultRevisionId: 'stt-production', createdAt: state.updatedAt, updatedAt: state.updatedAt, completedAt: state.updatedAt }],
+      }],
+    })!;
+
+    expect(story.transcriptRevisions?.map((revision) => revision.id)).toEqual(['raw-production', 'stt-production']);
+    expect(story.transcriptionAttempts?.[0]).toMatchObject({ id: 'attempt-production', basedOnRevisionId: 'raw-production', resultRevisionId: 'stt-production' });
+    expect(story.sources.filter((source) => source.audioFragmentId === 'production-audio').map((source) => source.transcriptRevisionId)).toEqual(['raw-production', 'stt-production']);
+    expect(story.text).toBe('Качественная расшифровка.');
+  });
+
   it('keeps question chains and gives all story audio an unambiguous final order', () => {
     const state = createEmptyState();
     const fragment = (id: string, position: number, transcript: string) => ({ fragment: { id, position, createdAt: state.updatedAt, contentType: 'audio/webm' as const, uploadStatus: 'saved' as const, objectKey: `author/questions/${id}.webm`, recognitionStatus: 'complete' as const }, transcript });

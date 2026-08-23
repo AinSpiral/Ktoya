@@ -19,7 +19,20 @@ export async function GET(request: NextRequest) {
   const userId = authenticatedUserId(request.headers, request.nextUrl.hostname === 'localhost' || request.nextUrl.hostname === '127.0.0.1');
   if (!userId) return NextResponse.json({ error: 'authentication_required' }, { status: 401 });
   if (!key || !key.startsWith(`${userId}/`)) return new NextResponse(null, { status: 403 });
-  const object = await env.STORY_MEDIA.get(key);
+  const object = await env.STORY_MEDIA.get(key, { range: request.headers });
   if (!object) return new NextResponse(null, { status: 404 });
-  return new NextResponse(object.body, { headers: { 'content-type': object.httpMetadata?.contentType ?? 'audio/webm' } });
+  const headers = new Headers();
+  object.writeHttpMetadata(headers);
+  headers.set('content-type', object.httpMetadata?.contentType ?? 'audio/webm');
+  headers.set('accept-ranges', 'bytes');
+  headers.set('etag', object.httpEtag);
+  if (object.range) {
+    const offset = ('offset' in object.range ? object.range.offset : undefined) ?? 0;
+    const length = ('length' in object.range ? object.range.length : undefined) ?? (object.size - offset);
+    headers.set('content-range', `bytes ${offset}-${offset + length - 1}/${object.size}`);
+    headers.set('content-length', String(length));
+  } else {
+    headers.set('content-length', String(object.size));
+  }
+  return new NextResponse(object.body, { status: object.range ? 206 : 200, headers });
 }

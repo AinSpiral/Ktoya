@@ -4,6 +4,7 @@ export type PrivacyLevel = 'private' | 'selected' | 'book';
 export type ChapterKind = 'life-stories' | 'imported-manuscript';
 export type TranscriptProviderKind = 'browser-speech-recognition' | 'manual' | 'production-stt' | 'ai-enhancement';
 export type TranscriptRevisionKind = 'raw' | 'improved';
+export type VoiceJobStatus = 'queued' | 'processing' | 'ready' | 'failed';
 
 export interface StorySource {
   id: string;
@@ -65,6 +66,28 @@ export interface TranscriptRevision {
   completenessStatus?: 'complete' | 'incomplete' | 'unavailable';
 }
 
+/**
+ * One immutable attempt to process an already saved recording. Attempts are
+ * append-only so an outage or a later retry cannot erase either the audio or
+ * an earlier result.
+ */
+export interface TranscriptionAttempt {
+  id: string;
+  audioFragmentId: string;
+  provider: string;
+  status: VoiceJobStatus;
+  /** The preserved revision supplied as context, normally the raw browser draft. */
+  basedOnRevisionId?: string;
+  resultRevisionId?: string;
+  externalJobId?: string;
+  createdAt: string;
+  updatedAt: string;
+  completedAt?: string;
+  errorCode?: string;
+  /** Safe user-facing detail only; provider payloads and secrets are never stored here. */
+  errorMessage?: string;
+}
+
 export interface InterviewAnswer {
   id: string;
   questionId?: string;
@@ -89,6 +112,25 @@ export interface StoryTitleRevision {
 /** A provider-produced narration is a real seekable asset, never a browser-voice imitation. */
 export interface StoryNarration {
   id: string;
+  provider: string;
+  /** A narration is valid only for this exact, preserved StoryRevision. */
+  storyRevisionId: string;
+  status: VoiceJobStatus;
+  objectKey?: string;
+  contentType?: string;
+  externalJobId?: string;
+  createdAt: string;
+  updatedAt: string;
+  completedAt?: string;
+  durationMs?: number;
+  voiceId?: string;
+  errorCode?: string;
+  errorMessage?: string;
+}
+
+/** Read-only compatibility shape from the pre-provider Beta. */
+export interface LegacyStoryNarration {
+  id: string;
   provider: 'production-tts';
   objectKey: string;
   contentType: string;
@@ -111,7 +153,14 @@ export interface StoryEditDraft {
  */
 export interface CaptureDraftFragment {
   fragment: AudioFragment;
+  /** Immutable browser/debug evidence once recognition finishes. */
+  rawTranscript?: string;
+  /** Currently selected working text; manual edits never replace rawTranscript. */
   transcript: string;
+  /** Persisted append-only history exists before the story is assembled. */
+  transcriptRevisions?: TranscriptRevision[];
+  /** Provider retries are preserved even when the author is still in capture/review. */
+  transcriptionAttempts?: TranscriptionAttempt[];
 }
 
 export interface VoiceAnswerCaptureDraft {
@@ -159,9 +208,12 @@ export interface Story {
   recordVersion?: number;
   audioFragments?: AudioFragment[];
   transcriptRevisions?: TranscriptRevision[];
+  transcriptionAttempts?: TranscriptionAttempt[];
   status?: 'draft' | 'confirmed';
   titleRevisions?: StoryTitleRevision[];
-  narration?: StoryNarration;
+  narration?: LegacyStoryNarration;
+  /** All generated assets are retained; text edits make older ones stale, not deleted. */
+  narrations?: StoryNarration[];
   /** Kept only so a legacy record can be migrated without guessing data. */
   audioKey?: string;
 }

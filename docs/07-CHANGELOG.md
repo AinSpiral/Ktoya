@@ -7,6 +7,23 @@
 
 # [Не выпущено]
 
+## 23.08.2026 — production voice foundation после PR #10
+
+### Реализовано без платного provider
+- Разделены browser live fallback и production `TranscriptionProvider`: сохранённый `AudioFragment` обрабатывается независимым submit/poll job, а каждая ошибка и повторная попытка сохраняются append-only без изменения оригинала.
+- `TranscriptRevision` и `TranscriptionAttempt` теперь живут уже в persisted capture-draft. Production STT можно повторить после надёжной загрузки аудио до сборки истории; raw/manual/production revisions и их идентификаторы переносятся в `Story` без потери `questionId`, `StorySource` или provenance.
+- Production `TTSProvider` возвращает реальный аудио-asset для точной `StoryRevision`; готовый файл хранится в R2 и проигрывается стандартным seekable media player. Правка текста сохраняет старый файл как историческую версию, но не выдаёт его за актуальный.
+- Media API поддерживает byte ranges для pause/seek/replay/reload; capability endpoints и ошибки не раскрывают provider payload или секреты.
+- Зафиксировано решение D053 и актуальное provider research. Рекомендуется ограниченный Yandex SpeechKit trial; подключение, billing и секреты ждут отдельного разрешения Автора.
+
+### Проверено до provider decision
+- Targeted regression: 40 тестов для capture/book transcription, retries, question provenance, StoryRevision update, TTS cache/stale/error, HTTP adapters и data safety.
+- TypeScript typecheck проходит. Полный test/lint/typecheck/build/diff-check будет выполнен один раз после фактического provider integration, как требует граница этапа.
+
+### Остаётся launch blocker
+- Реальная production STT-приёмка на короткой/1–2-минутной русской речи и реальная human TTS-приёмка ещё невозможны без разрешённого provider/API.
+- Browser MediaRecorder в Chrome сохраняет WebM/Opus, а shortlist providers документирует WAV/OGG/MP3/FLAC, но не WebM; до production trial нужен подтверждённый input path или server-side conversion.
+
 ## 23.08.2026 — PR #10: обратимое архивирование вместо удаления
 
 ### Изменено в PR #10

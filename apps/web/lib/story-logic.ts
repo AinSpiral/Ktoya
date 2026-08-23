@@ -103,6 +103,61 @@ export function makeStory(input: {
   };
 }
 
+function captureTranscriptHistory(item: CaptureDraftFragment, now: string): TranscriptRevision[] {
+  const rawText = (item.rawTranscript === undefined ? item.transcript : item.rawTranscript).trim();
+  const selectedText = item.transcript.trim();
+  const existing = item.transcriptRevisions ?? [];
+  if (existing.length) {
+    const selected = [...existing].reverse().find((revision) => revision.selected);
+    if (!selectedText || selected?.text === selectedText) return existing;
+    return [
+      ...existing.map((revision) => ({ ...revision, selected: false })),
+      {
+        id: crypto.randomUUID(),
+        audioFragmentId: item.fragment.id,
+        text: selectedText,
+        provider: 'manual',
+        revisionKind: 'improved',
+        basedOnRevisionId: selected?.id,
+        createdAt: now,
+        selected: true,
+        verificationStatus: 'confirmed',
+        completenessStatus: 'complete',
+      },
+    ];
+  }
+  if (!rawText && !selectedText) return [];
+  const rawId = crypto.randomUUID();
+  const completenessStatus = item.fragment.recognitionStatus === 'complete' ? 'complete' as const
+    : item.fragment.recognitionStatus === 'processing' || item.fragment.recognitionStatus === 'incomplete' ? 'incomplete' as const
+      : 'unavailable' as const;
+  return [
+    ...(rawText ? [{
+      id: rawId,
+      audioFragmentId: item.fragment.id,
+      text: rawText,
+      provider: 'browser-speech-recognition' as const,
+      revisionKind: 'raw' as const,
+      createdAt: now,
+      selected: rawText === selectedText,
+      verificationStatus: 'unverified' as const,
+      completenessStatus,
+    }] : []),
+    ...(selectedText && selectedText !== rawText ? [{
+      id: crypto.randomUUID(),
+      audioFragmentId: item.fragment.id,
+      text: selectedText,
+      provider: 'manual' as const,
+      revisionKind: 'improved' as const,
+      basedOnRevisionId: rawText ? rawId : undefined,
+      createdAt: now,
+      selected: true,
+      verificationStatus: 'confirmed' as const,
+      completenessStatus: 'complete' as const,
+    }] : []),
+  ];
+}
+
 /**
  * Builds the review-stage story from a persisted capture draft without
  * changing its append-only source fragments. This also makes a #draft reload
@@ -125,10 +180,8 @@ export function assembleCaptureDraft(capture: Pick<CaptureDraft, 'id' | 'sourceT
     ...capture.voiceAnswerDrafts.flatMap((draft) => draft.fragments.map((item) => ({ item, questionId: draft.questionId }))),
   ];
   const now = new Date().toISOString();
-  const transcriptRevisions = allFragments.filter(({ item }) => item.transcript.trim()).map(({ item }) => ({
-    id: crypto.randomUUID(), audioFragmentId: item.fragment.id, text: item.transcript.trim(), provider: 'browser-speech-recognition' as const, revisionKind: 'raw' as const, createdAt: now, selected: true, verificationStatus: 'unverified' as const, completenessStatus: item.fragment.recognitionStatus === 'processing' ? 'incomplete' as const : item.fragment.recognitionStatus ?? 'unavailable' as const,
-  }));
-  const revisionByFragmentId = new Map(transcriptRevisions.map((revision) => [revision.audioFragmentId, revision.id]));
+  const transcriptRevisions = allFragments.flatMap(({ item }) => captureTranscriptHistory(item, now));
+  const revisionByFragmentId = new Map(transcriptRevisions.filter((revision) => revision.selected).map((revision) => [revision.audioFragmentId, revision.id]));
   const completeAnswers = answers.map((answerItem) => {
     const draftForAnswer = capture.voiceAnswerDrafts.find((draft) => draft.answerId === answerItem.id);
     if (!draftForAnswer) return answerItem;
@@ -146,9 +199,13 @@ export function assembleCaptureDraft(capture: Pick<CaptureDraft, 'id' | 'sourceT
     // originals as the same "Audio 1".
     audioFragments: allFragments.map(({ item }, index) => ({ ...item.fragment, position: index + 1 })),
     transcriptRevisions,
+    transcriptionAttempts: allFragments.flatMap(({ item }) => item.transcriptionAttempts ?? []),
     sources: [
       ...(capture.sourceText.trim() ? [{ id: crypto.randomUUID(), kind: 'typed' as const, text: capture.sourceText.trim(), createdAt: now }] : []),
-      ...allFragments.filter(({ item }) => item.transcript.trim()).map(({ item, questionId }) => ({ id: crypto.randomUUID(), kind: 'transcript' as const, text: item.transcript.trim(), createdAt: now, audioFragmentId: item.fragment.id, transcriptRevisionId: revisionByFragmentId.get(item.fragment.id), questionId })),
+      ...transcriptRevisions.map((revision) => {
+        const questionId = allFragments.find(({ item }) => item.fragment.id === revision.audioFragmentId)?.questionId;
+        return { id: crypto.randomUUID(), kind: 'transcript' as const, text: revision.text, createdAt: now, audioFragmentId: revision.audioFragmentId, transcriptRevisionId: revision.id, questionId };
+      }),
       ...base.sources.filter((item) => item.kind === 'interview-answer').map((item) => {
         const answerItem = completeAnswers.find((candidate) => candidate.id === item.id);
         return { ...item, questionId: answerItem?.questionId, audioFragmentId: answerItem?.audioFragmentId, transcriptRevisionId: answerItem?.transcriptRevisionId };
@@ -292,21 +349,16 @@ export function appendStoryMaterials(story: Story, input: { operationId: string;
   const existingAudioIds = new Set((story.audioFragments ?? []).map((item) => item.id));
   const fragments = input.fragments.filter((item) => !existingAudioIds.has(item.fragment.id));
   const typed = input.text.trim();
-  const transcriptFragments = fragments.filter((item) => item.transcript.trim());
+  const transcriptFragments = fragments.filter((item) => item.transcript.trim() || item.rawTranscript?.trim());
   if (!typed && !fragments.length) return story;
   const now = new Date().toISOString();
   const startPosition = story.audioFragments?.length ?? 0;
-  const revisions = transcriptFragments.map((item) => ({
-    id: crypto.randomUUID(), audioFragmentId: item.fragment.id, text: item.transcript.trim(), provider: 'browser-speech-recognition' as const,
-    revisionKind: 'raw' as const, createdAt: now, selected: true, verificationStatus: 'unverified' as const,
-    completenessStatus: item.fragment.recognitionStatus === 'complete' ? 'complete' as const : item.fragment.recognitionStatus === 'processing' || item.fragment.recognitionStatus === 'incomplete' ? 'incomplete' as const : 'unavailable' as const,
-  }));
-  const revisionByAudio = new Map(revisions.map((item) => [item.audioFragmentId, item.id]));
+  const revisions = transcriptFragments.flatMap((item) => captureTranscriptHistory(item, now));
   const additions = [typed, ...transcriptFragments.map((item) => item.transcript.trim())].filter(Boolean);
   const text = [story.text.trim(), ...additions].filter(Boolean).join('\n\n');
   const sources: StorySource[] = [
     ...(typed ? [{ id: crypto.randomUUID(), kind: 'typed' as const, text: typed, createdAt: now, editOperationId: input.operationId }] : []),
-    ...transcriptFragments.map((item) => ({ id: crypto.randomUUID(), kind: 'transcript' as const, text: item.transcript.trim(), createdAt: now, audioFragmentId: item.fragment.id, transcriptRevisionId: revisionByAudio.get(item.fragment.id), editOperationId: input.operationId })),
+    ...revisions.map((revision) => ({ id: crypto.randomUUID(), kind: 'transcript' as const, text: revision.text, createdAt: now, audioFragmentId: revision.audioFragmentId, transcriptRevisionId: revision.id, editOperationId: input.operationId })),
   ];
   if (!sources.length) sources.push({ id: crypto.randomUUID(), kind: 'manual-edit', text: '', createdAt: now, editOperationId: input.operationId });
   return {
@@ -315,6 +367,7 @@ export function appendStoryMaterials(story: Story, input: { operationId: string;
     updatedAt: now,
     audioFragments: [...(story.audioFragments ?? []), ...fragments.map((item, index) => ({ ...item.fragment, position: startPosition + index + 1 }))],
     transcriptRevisions: [...(story.transcriptRevisions ?? []), ...revisions],
+    transcriptionAttempts: [...(story.transcriptionAttempts ?? []), ...fragments.flatMap((item) => item.transcriptionAttempts ?? [])],
     sources: [...story.sources, ...sources],
     revisions: [...story.revisions, { id: crypto.randomUUID(), text, createdAt: now, reason: 'manual-edit' }],
   };
