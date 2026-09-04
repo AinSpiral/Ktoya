@@ -204,6 +204,8 @@ export interface CaptureDraftFragment {
   rawTranscript?: string;
   /** Currently selected working text; manual edits never replace rawTranscript. */
   transcript: string;
+  /** Sticky author ownership: late browser results must never regain write access. */
+  manuallyEdited?: boolean;
   /** Persisted append-only history exists before the story is assembled. */
   transcriptRevisions?: TranscriptRevision[];
   /** Provider retries are preserved even when the author is still in capture/review. */

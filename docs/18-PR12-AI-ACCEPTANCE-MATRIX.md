@@ -89,3 +89,21 @@ Live microphone не проверялся без физического/вирт
 - Public-Beta blockers из PRD не снимаются: production-quality STT, production auth/account, настоящий книжный PDF, payment/subscription/AI balance, privacy/legal readiness для реальных пользовательских данных.
 
 PR #12 не является разрешением отправлять Alice AI реальные личные истории и не является разрешением merge или production migration.
+
+## 6. Локальный Stage A — 05.09.2026
+
+Основа: local `1de5f7aa69297c8857b56151ee3f8fbabe3c755c`; origin/main `d2020a6277ef31af115175ec0b835de189aa0423`; remote Draft PR #12 `74e3d460ee07f3e82366bbef4c921b2bed801b63`. Все изменения остаются локальными, production и бюджет не менялись.
+
+В `apps/web/e2e` добавлен изолированный Playwright/Chrome контур: loopback:3100, собственные D1/R2, отключённая загрузка developer secrets и remote bindings. Синтетические PCM WAV 12/6/106 s создаются офлайн. Положительные тесты используют нативные getUserMedia → MediaRecorder → UI → upload → persistence → reload; Blob/DB не подменяются. Только облачный SpeechRecognition выключен. Отказы устройства проверяются отдельными явно помеченными simulations.
+
+Команда: `pnpm run test:e2e:voice`. Механизм соответствует [Chromium media switches](https://chromium.googlesource.com/chromium/src/+/main/media/base/media_switches.cc): `--use-fake-device-for-media-stream`, `--use-file-for-fake-audio-capture=<WAV>%noloop`; отдельный Chrome context с разрешением localhost microphone, не пользовательский профиль.
+
+Свежие результаты Stage A:
+- 25 файлов / 111 unit/integration tests PASS; typecheck, lint и production build PASS.
+- Все 8 коротких browser tests PASS одним прогоном: voice-only, reload при pending acknowledgement, denied/no-device, двойной старт/стоп, mixed input, voice answer/provenance/manual transcript/archive, book-state addition/newest-first/reload.
+- Отдельный native long test PASS: сохранено 105130 ms; decoded 105.12 s; частоты 440/660/880 Hz найдены на 4/50/102 s после reload. Это проверка транспорта, НЕ качества распознавания или физического микрофона.
+- Browser external requests: 0. Runtime console errors/warnings: 0 кроме ожидаемого HTTP 404 при первом GET отсутствующего состояния нового synthetic author. Server voice provider capabilities недоступны, AI deterministic; новых платных вызовов нет.
+
+Root causes → fixes: refs старой записи → per-session buffer/cleanup/disposed guards; late recognition → sticky manual ownership; навигация во время записи → synchronous guards; нормализация reload без принятия server version → await и установка returned state; AI и autosave в разных очередях → одна очередь и merge свежих AI metadata; book addition на изменённую selection → explicit draft owner guard. Отдельные helper regression tests покрывают финализацию один раз, пустой Blob, duration, manual ownership и autosave metadata.
+
+Граница доказательств: принудительное закрытие до отправки Blob пока не имеет durable local journal; предупреждение beforeunload и честный failed/incomplete статус не равны гарантии восстановления несохранённого аудио. Safari/iOS, реальный микрофон и production STT не проверены этим контуром. Полный итоговый прогон после Stage B обязателен; текущие результаты не подменяют его.

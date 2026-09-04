@@ -7,6 +7,12 @@
 
 # [Не выпущено]
 
+## 05.09.2026 — локальный Stage A: native voice QA и восстановление
+
+- Добавлен изолированный Playwright/Chromium fake-microphone контур с offline WAV, reload/playback/provenance и 105-секундной проверкой сохранённого оригинала.
+- Исправлены lifecycle recording, sticky manual transcript, ownership дополнений, startup version и AI/autosave races. Свежие свидетельства и ограничения: [18 — acceptance](18-PR12-AI-ACCEPTANCE-MATRIX.md#6-локальный-stage-a--05092026).
+- Нет push/merge, production migration, изменений IAM или новых платных вызовов.
+
 ## 04.09.2026 — повторная проверка Draft PR #12 после обрыва питания
 
 ### Исправлено
