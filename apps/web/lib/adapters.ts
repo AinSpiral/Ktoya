@@ -1,5 +1,7 @@
 import type { AIProvenanceSegment, AIStoryPreview, AITargetedPatch, AppState, FeedbackEntry, InterviewQuestionCategory } from './domain';
 import type { VoiceProviderCapabilities } from './voice-provider-registry';
+import type { NarrativeStyle } from './story-styles';
+import { bookMarkdown } from './book-export';
 
 export interface AIStorySourceInput {
   id: string;
@@ -15,6 +17,7 @@ export interface AIStoryContextInput {
   currentTitle?: string;
   currentText?: string;
   currentRevisionId?: string;
+  narrativeStyle?: NarrativeStyle;
 }
 
 export interface AIUsage {
@@ -249,7 +252,7 @@ export class HttpAIProcessingAdapter {
 
   nextInterviewStep(captureDraftId: string, operationId: string) { return this.post({ action: 'interview-next', captureDraftId, operationId }); }
   assemble(captureDraftId: string, operationId: string) { return this.post({ action: 'assembly', captureDraftId, operationId }); }
-  rephrase(owner: { storyId?: string; captureDraftId?: string }, operationId: string) { return this.post({ action: 'rephrase', ...owner, operationId }); }
+  rephrase(owner: { storyId?: string; captureDraftId?: string }, operationId: string, narrativeStyle: NarrativeStyle = 'natural') { return this.post({ action: 'rephrase', ...owner, operationId, narrativeStyle }); }
   patch(owner: { storyId?: string; captureDraftId?: string }, operationId: string, expectedOldText: string, instruction: string) { return this.post({ action: 'patch', ...owner, operationId, expectedOldText, instruction }); }
   applyPreview(owner: { storyId?: string; captureDraftId?: string }, operationId: string, previewId: string) { return this.post({ action: 'apply-preview', ...owner, operationId, previewId }); }
   keepOriginal(owner: { storyId?: string; captureDraftId?: string }, operationId: string, previewId: string) { return this.post({ action: 'keep-original', ...owner, operationId, previewId }); }
@@ -286,7 +289,7 @@ function download(name: string, body: string, type: string) {
 export const browserExportAdapter: ExportAdapter = {
   json(state) { download('ktoya-book.json', JSON.stringify(state, null, 2), 'application/json'); },
   markdown(state) {
-    const body = [`# ${state.book.title}`, ...state.stories.flatMap((story) => [`\n## ${story.title}\n`, story.text])].join('\n');
+    const body = bookMarkdown(state);
     download('ktoya-book.md', body, 'text/markdown;charset=utf-8');
   },
   print() { window.print(); },

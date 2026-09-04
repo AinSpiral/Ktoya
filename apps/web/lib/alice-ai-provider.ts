@@ -1,4 +1,5 @@
 import type { AIAssemblyProposal, AIInterviewDecision, AIPatchRequest, AIProvider, AIProviderResult, AIRephraseProposal, AIStoryContextInput } from './adapters';
+import { styleInstruction } from './story-styles';
 import type { AITargetedPatch } from './domain';
 import { parseAssemblyProposal, parseInterviewDecision, parseRephraseProposal, parseTargetedPatch, responseSchemaFor } from './ai-schemas';
 import { requireReservedAiOperation, type AIOperationKind } from './ai-trial-budget';
@@ -56,7 +57,7 @@ export class AliceAIProvider implements AIProvider {
         max_tokens: outputTokens(kind),
         messages: [
           { role: 'system', content: SYSTEM_RULES },
-          { role: 'user', content: `${operationInstruction(kind, patch)}\n\nРазрешённый контекст текущей истории:\n${JSON.stringify(input)}` },
+          { role: 'user', content: `${operationInstruction(kind, patch)}${kind === 'rephrase' ? `\nСтиль: ${styleInstruction(input.narrativeStyle)}` : ''}\n\nРазрешённый контекст текущей истории:\n${JSON.stringify(input)}` },
         ],
         response_format: { type: 'json_schema', json_schema: { name: `ktoya_${schemaKey}`, strict: true, schema: responseSchemaFor(schemaKey, input.sources.map((source) => source.id), patch?.expectedOldText) } },
       }),

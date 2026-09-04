@@ -188,6 +188,8 @@ export interface LegacyStoryNarration {
 export interface StoryEditDraft {
   id: string;
   storyId: string;
+  /** Instructions stay separate from narrative additions and their sources. */
+  purpose?: 'addition' | 'edit-instruction';
   text: string;
   fragments: CaptureDraftFragment[];
   updatedAt: string;
@@ -325,6 +327,67 @@ export interface Book {
   chapterIds: string[];
   createdAt: string;
   updatedAt: string;
+  /** Local composition proposals never rewrite Story material or contact a provider. */
+  compositionPreviews?: BookCompositionPreview[];
+  /** Append-only structure decisions, including undo; original chapter snapshots are retained. */
+  compositionRevisions?: BookCompositionRevision[];
+}
+
+export type BookCompositionMode = 'manual' | 'chronological' | 'theme';
+
+export interface BookStorySnapshot {
+  storyId: string;
+  revisionId: string;
+  title: string;
+  text: string;
+  sourceIds: string[];
+}
+
+export interface BookPlanChapter {
+  id: string;
+  title: string;
+  storyIds: string[];
+}
+
+export interface BookStructureSnapshot {
+  title: string;
+  storyIds: string[];
+  chapterIds: string[];
+  chapters: Chapter[];
+}
+
+export interface BookCompositionGap {
+  storyId: string;
+  kind: 'unknown-date' | 'unknown-theme';
+  question: string;
+}
+
+export interface BookCompositionPreview {
+  id: string;
+  bookId: string;
+  mode: BookCompositionMode;
+  status: 'pending' | 'applied' | 'kept-original';
+  createdAt: string;
+  selectedStories: BookStorySnapshot[];
+  baseStructure: BookStructureSnapshot;
+  chapters: BookPlanChapter[];
+  gaps: BookCompositionGap[];
+  explanation: string;
+  /** These labels are explicit author input, never inferred from story creation time. */
+  confirmedMetadata?: Record<string, { year?: number; theme?: string }>;
+  operationId?: string;
+}
+
+export interface BookCompositionRevision {
+  id: string;
+  operationId: string;
+  reason: 'apply' | 'undo';
+  previewId?: string;
+  basedOnRevisionId?: string;
+  createdAt: string;
+  before: BookStructureSnapshot;
+  after: BookStructureSnapshot;
+  selectedStories: BookStorySnapshot[];
 }
 
 export interface Chapter {

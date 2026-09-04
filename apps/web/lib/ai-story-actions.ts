@@ -59,7 +59,7 @@ export function makeRephrasePreview(story: Story, operationId: string, provider:
   const context = contextForStory(story);
   assertAllowedSourceIds(context, result.value.sourceIds);
   assertNoUnsupportedLexicalAnchors(context, result.value.storyText);
-  return { id: crypto.randomUUID(), operationId, type: 'rephrase', provider, model: result.model, createdAt: new Date().toISOString(), status: 'pending', baseRevisionId: context.currentRevisionId, sourceIds: result.value.sourceIds, storyText: result.value.storyText };
+  return { id: crypto.randomUUID(), operationId, type: 'rephrase', provider, model: result.model, createdAt: new Date().toISOString(), status: 'pending', baseRevisionId: context.currentRevisionId, sourceIds: result.value.sourceIds, storyText: result.value.storyText, uncertainties: [result.value.reason] };
 }
 
 export function makePatchPreview(story: Story, operationId: string, provider: string, result: AIProviderResult<AITargetedPatch>): AIStoryPreview {

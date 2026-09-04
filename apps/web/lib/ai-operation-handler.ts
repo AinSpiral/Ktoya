@@ -10,6 +10,7 @@ import { appendInterviewDecision, applyAssemblyPreview, applyStoryPreview, keepO
 import { contextForCaptureDraft, contextForStory } from './ai-story-context';
 import { authenticatedUserId } from './server-auth';
 import { loadAuthorState, saveAuthorState, StateConflictError } from './server-state';
+import { isNarrativeStyle } from './story-styles';
 
 type GenerateBody = {
   action: AIOperationKind;
@@ -18,6 +19,7 @@ type GenerateBody = {
   storyId?: string;
   expectedOldText?: string;
   instruction?: string;
+  narrativeStyle?: unknown;
 };
 
 type MutationBody = {
@@ -108,6 +110,8 @@ export async function handleAIOperation(request: NextRequest, runtimeEnv: Cloudf
     const owner = (draft ?? story)!;
     const storyTarget = story ?? draft?.assembledDraft;
     const context = body.action === 'interview-next' || body.action === 'assembly' ? contextForCaptureDraft(draft!) : contextForStory(storyTarget!);
+    if (generate.narrativeStyle !== undefined && !isNarrativeStyle(generate.narrativeStyle)) return NextResponse.json({ error: 'invalid_narrative_style' }, { status: 400 });
+    if (body.action === 'rephrase') context.narrativeStyle = isNarrativeStyle(generate.narrativeStyle) ? generate.narrativeStyle : 'natural';
     if (!context.sources.length) return NextResponse.json({ error: 'confirmed_sources_required' }, { status: 409 });
     if (body.action === 'interview-next' && (draft!.interviewQuestions?.length ?? 0) >= 8) return NextResponse.json({ state, decision: { decision: 'READY', reason: 'Достигнут аварийный предел восьми вопросов.' } });
 
