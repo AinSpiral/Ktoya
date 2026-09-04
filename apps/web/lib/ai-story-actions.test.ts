@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import type { CaptureDraft } from './domain';
 import { appendStoryTextRevision, assembleCaptureDraft } from './story-logic';
 import { appendInterviewDecision, applyAssemblyPreview, applyStoryPreview, keepOriginalPreview, makeAssemblyPreview, makeRephrasePreview, undoLatestStoryTextChange } from './ai-story-actions';
+import { contextForCaptureDraft } from './ai-story-context';
+import { DeterministicAIProvider } from './deterministic-ai-provider';
 
 function draft(): CaptureDraft {
   return { id: 'qa-draft', sourceText: 'В субботу я собрал бумажный кораблик.', answer: '', interviewAnswers: [], storyFragments: [], answerFragments: [], voiceAnswerDrafts: [], capturePurpose: 'story', externalProcessingPolicy: 'qa-nonpersonal-trial', updatedAt: '2026-08-23T12:00:00.000Z' };
@@ -18,6 +20,27 @@ describe('AI story state transitions', () => {
     expect(() => appendInterviewDecision(first.draft, 'op-2', 'yandex-ai-studio', result)).toThrow('repeat');
     const limited = appendInterviewDecision({ ...base, interviewQuestions: Array.from({ length: 8 }, (_, index) => ({ id: `q-${index}`, text: `Вопрос ${index}`, category: 'gap' as const, purpose: 'QA', relatedSourceIds: [`source:typed:${base.id}`], createdAt: base.updatedAt, provider: 'mock', model: 'mock' })) }, 'op-limit', 'mock', result);
     expect(limited.decision.decision).toBe('READY');
+  });
+
+  it('advances deterministic interview categories after application-safe wording and keeps long anchors readable', async () => {
+    const provider = new DeterministicAIProvider();
+    const base = { ...draft(), sourceText: 'В субботу я собрал бумажный кораблик. Лист порвался по сгибу, и я заклеил его прозрачной лентой. Потом кораблик проплыл по луже до красной скамейки.' };
+    const first = appendInterviewDecision(base, 'op-category-1', provider.id, await provider.nextInterviewStep(contextForCaptureDraft(base)));
+    expect(first.draft.interviewQuestions?.[0]).toMatchObject({ category: 'meaning' });
+    expect(first.draft.interviewQuestions?.[0].anchorQuote).toBe('В субботу я собрал бумажный кораблик.');
+
+    const firstQuestion = first.draft.interviewQuestions![0];
+    const answered = {
+      ...first.draft,
+      interviewAnswers: [{ id: 'answer-category-1', questionId: firstQuestion.id, question: firstQuestion.text, answer: 'Не помню.', createdAt: base.updatedAt }],
+    };
+    const secondResult = await provider.nextInterviewStep(contextForCaptureDraft(answered));
+    expect(secondResult.value).toMatchObject({ decision: 'ASK', category: 'people' });
+    const second = appendInterviewDecision(answered, 'op-category-2', provider.id, secondResult);
+    expect(second.draft.interviewQuestions?.[1].category).toBe('people');
+    expect(second.draft.interviewQuestions?.[1].text).not.toContain('Что это значит для тебя?');
+    expect(second.draft.interviewQuestions?.[1].text).not.toContain('Не помню');
+    expect(second.draft.interviewQuestions?.[1].anchorQuote).toBe('В субботу я собрал бумажный кораблик.');
   });
 
   it('applies assembly only as a new StoryRevision and keeps source provenance', () => {

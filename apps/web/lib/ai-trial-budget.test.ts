@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { actualAiCostRub, estimateAiMaxCostRub, reserveAiOperation } from './ai-trial-budget';
+import { actualAiCostRub, estimateAiMaxCostRub, linkAiOperationRevision, reserveAiOperation } from './ai-trial-budget';
 
 describe('Alice AI trial cost guard', () => {
   const rates = { inputRubPer1kTokens: 0.5, outputRubPer1kTokens: 1.2 };
@@ -29,5 +29,18 @@ describe('Alice AI trial cost guard', () => {
     expect(sql[0]).toContain('INSERT OR IGNORE');
     expect(sql[0]).toContain("status IN ('completed', 'failed')");
     expect(sql[0]).toContain("status IN ('reserved', 'uncertain')");
+  });
+
+  it('links a created revision only to an operation owned by the same author', async () => {
+    let sql = '';
+    let bindings: unknown[] = [];
+    const db = { prepare: vi.fn((statement: string) => {
+      sql = statement;
+      return { bind: (...values: unknown[]) => { bindings = values; return { run: async () => ({ meta: { changes: 1 } }) }; } };
+    }) } as unknown as D1Database;
+    await linkAiOperationRevision(db, 'author-a', 'operation-a', 'revision-a');
+    expect(sql).toContain('operation_id = ? AND user_id = ?');
+    expect(bindings.slice(0, 1)).toEqual(['revision-a']);
+    expect(bindings.slice(-2)).toEqual(['operation-a', 'author-a']);
   });
 });

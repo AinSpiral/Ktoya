@@ -11,7 +11,7 @@ export interface AIStorySourceInput {
 export interface AIStoryContextInput {
   storyId: string;
   sources: AIStorySourceInput[];
-  askedQuestions: Array<{ questionId: string; question: string; answer?: string }>;
+  askedQuestions: Array<{ questionId: string; question: string; category?: InterviewQuestionCategory; answer?: string }>;
   currentTitle?: string;
   currentText?: string;
   currentRevisionId?: string;

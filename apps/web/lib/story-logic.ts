@@ -28,8 +28,12 @@ export function nextFollowUpQuestion(sourceText: string, answers: InterviewAnswe
   return FOLLOW_UP_SCENARIOS.find((scenario) => !used.has(scenario.id) && !used.has(scenario.question)) ?? null;
 }
 
+export function isNonAnswerText(text: string) {
+  return /^(?:не\s+(?:помню|знаю)|затрудняюсь(?:\s+ответить)?)[.!?…]*$/iu.test(text.trim());
+}
+
 export function assembleStory(sourceText: string, answers: InterviewAnswer[]): string {
-  const fragments = [sourceText, ...answers.map((item) => item.answer)]
+  const fragments = [sourceText, ...answers.map((item) => item.answer).filter((item) => !isNonAnswerText(item))]
     .map((item) => item.trim())
     .filter(Boolean);
   return fragments.join('\n\n');

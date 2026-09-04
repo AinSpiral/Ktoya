@@ -1,6 +1,6 @@
 import type { AIAssemblyProposal, AIInterviewDecision, AIPatchRequest, AIProvider, AIProviderResult, AIRephraseProposal, AIStoryContextInput } from './adapters';
 import type { AITargetedPatch, InterviewQuestionCategory } from './domain';
-import { deriveStoryTitle } from './story-logic';
+import { deriveStoryTitle, isNonAnswerText } from './story-logic';
 
 const DIRECTIONS: Array<{ category: InterviewQuestionCategory; question: string; purpose: string }> = [
   { category: 'meaning', question: 'Что в этом воспоминании для тебя особенно важно?', purpose: 'Раскрыть значение события словами Автора' },
@@ -27,17 +27,21 @@ export class DeterministicAIProvider implements AIProvider {
   async nextInterviewStep(input: AIStoryContextInput): Promise<AIProviderResult<AIInterviewDecision>> {
     if (!input.sources.length || input.askedQuestions.length >= 8) return result({ decision: 'READY', reason: input.sources.length ? 'Достигнут аварийный предел вопросов.' : 'Нет подтверждённого материала для вопроса.' });
     const used = new Set(input.askedQuestions.map((item) => item.question));
-    const next = DIRECTIONS.find((item) => !used.has(item.question));
+    const usedCategories = new Set(input.askedQuestions.map((item) => item.category).filter(Boolean));
+    const next = DIRECTIONS.find((item) => !usedCategories.has(item.category) && !used.has(item.question));
     if (!next) return result({ decision: 'READY', reason: 'Без внешнего ИИ безопасные направления уточнения исчерпаны.' });
-    const anchorQuote = input.sources.at(-1)?.text.slice(0, 180).trim() ?? '';
-    return result({ decision: 'ASK', ...next, anchorQuote, relatedSourceIds: input.sources.slice(-2).map((source) => source.id) });
+    const informativeSources = input.sources.filter((source) => !isNonAnswerText(source.text));
+    const anchorSources = informativeSources.length ? informativeSources : input.sources;
+    const anchorQuote = anchorSources.at(-1)?.text.slice(0, 180).trim() ?? '';
+    return result({ decision: 'ASK', ...next, anchorQuote, relatedSourceIds: anchorSources.slice(-2).map((source) => source.id) });
   }
 
   async assemble(input: AIStoryContextInput): Promise<AIProviderResult<AIAssemblyProposal>> {
-    const storyText = input.sources.map((source) => source.text.trim()).filter(Boolean).join('\n\n');
+    const includedSources = input.sources.filter((source) => source.kind !== 'interview-answer' || !isNonAnswerText(source.text));
+    const storyText = includedSources.map((source) => source.text.trim()).filter(Boolean).join('\n\n');
     return result({
       title: deriveStoryTitle(storyText), storyText,
-      provenance: input.sources.filter((source) => source.text.trim()).map((source) => ({ segment: source.text.trim(), sourceIds: [source.id] })),
+      provenance: includedSources.filter((source) => source.text.trim()).map((source) => ({ segment: source.text.trim(), sourceIds: [source.id] })),
       uncertainties: [],
     });
   }

@@ -18,7 +18,13 @@ function safeInterviewWording(context: ReturnType<typeof contextForCaptureDraft>
   const related = context.sources.filter((source) => decision.relatedSourceIds.includes(source.id));
   const exact = related.some((source) => source.text.includes(decision.anchorQuote)) ? decision.anchorQuote : '';
   const fallback = related[0]?.text.split(/(?<=[.!?…])\s/)[0]?.slice(0, 180).trim() ?? '';
-  const anchorQuote = (exact || fallback).trim();
+  const rawAnchor = (exact || fallback).replace(/\s+/g, ' ').trim();
+  const sentence = rawAnchor.match(/^.{1,110}?[.!?…](?=\s|$)/u)?.[0];
+  const clipped = rawAnchor.slice(0, 111);
+  const wordBoundary = clipped.lastIndexOf(' ');
+  const anchorQuote = rawAnchor.length <= 110
+    ? rawAnchor
+    : sentence ?? rawAnchor.slice(0, wordBoundary >= 60 ? wordBoundary : 110).trimEnd();
   if (!anchorQuote) throw new Error('AI question has no confirmed source anchor.');
   const language = SAFE_INTERVIEW_LANGUAGE[decision.category];
   const displayQuote = anchorQuote.replace(/[.!?…]+$/, '');

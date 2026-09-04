@@ -7,6 +7,21 @@
 
 # [Не выпущено]
 
+## 04.09.2026 — повторная проверка Draft PR #12 после обрыва питания
+
+### Исправлено
+- Deterministic interview больше не повторяет ту же смысловую категорию после безопасной серверной формулировки вопроса: сохранённая `category` стала частью provider context.
+- Длинный исходник не вставляется целиком в вопрос: anchor ограничен первой содержательной фразой и безопасной длиной.
+- Точный неответ `Не помню` / `Не знаю` / `Затрудняюсь ответить` сохраняется как исходный материал и provenance, но не используется как следующий anchor и не включается в читаемый текст истории.
+- Привязка созданной revision к `ai_operations` дополнительно ограничена аутентифицированным `user_id`, поэтому клиентский `operationId` не может изменить чужую audit-запись.
+- Заголовок книги правильно склоняет количество историй (`20 историй`, а не `20 истории`).
+
+### Фактическая проверка
+- 23 test files / 101 test, ESLint, TypeScript `--noEmit`, production build и `git diff --check` прошли.
+- В браузере пройдены question → non-answer → next category → assembly → Apply → rephrase → Apply → Undo → reload → exact patch → Keep → book-state; console errors/warnings отсутствуют.
+- Визуально проверены 360, 390, 768, 1024 и 1600 px. Live microphone не имитировался без синтетического virtual-mic fixture.
+- Security diff review охватил 30 executable/source-файлов; найденный owner-scope дефект исправлен и закреплён regression test, выживших reportable findings нет.
+
 ## 23.08.2026 — PR #12: provider-independent AI Story Core
 
 ### Добавлено

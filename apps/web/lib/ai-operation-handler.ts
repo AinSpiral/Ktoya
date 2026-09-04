@@ -218,7 +218,7 @@ async function handleMutation(db: D1Database, userId: string, state: AppState, b
     }
     const saved = await saveDraft(db, userId, state, next);
     const preview = body.previewId ? next.aiPreviews?.find((item) => item.id === body.previewId) : undefined;
-    if (preview?.createdRevisionId) await linkAiOperationRevision(db, preview.operationId, preview.createdRevisionId);
+    if (preview?.createdRevisionId) await linkAiOperationRevision(db, userId, preview.operationId, preview.createdRevisionId);
     return NextResponse.json({ state: saved, preview });
   }
   const story = body.storyId ? state.stories.find((item) => item.id === body.storyId) : undefined;
@@ -229,6 +229,6 @@ async function handleMutation(db: D1Database, userId: string, state: AppState, b
   else next = body.action === 'apply-preview' ? applyStoryPreview(story, body.previewId) : keepOriginalPreview(story, body.previewId);
   const saved = await saveStory(db, userId, state, next);
   const preview = body.previewId ? next.aiPreviews?.find((item) => item.id === body.previewId) : undefined;
-  if (preview?.createdRevisionId) await linkAiOperationRevision(db, preview.operationId, preview.createdRevisionId);
+  if (preview?.createdRevisionId) await linkAiOperationRevision(db, userId, preview.operationId, preview.createdRevisionId);
   return NextResponse.json({ state: saved, preview, revision: next.revisions.at(-1) });
 }

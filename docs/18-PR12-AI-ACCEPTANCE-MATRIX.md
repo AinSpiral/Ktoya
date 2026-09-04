@@ -1,6 +1,6 @@
 # PR #12 — AI Story Core Acceptance Matrix
 
-Дата evidence: 23.08.2026
+Дата evidence: 04.09.2026 (повторная независимая проверка после обрыва питания)
 Статус: объективный технический контур реализован и проверен; литературное качество и полезность вопросов — `PENDING USER ACCEPTANCE`.
 
 ## 1. Границы приёмки
@@ -20,7 +20,7 @@ PR #12 подключает provider-independent AI-ядро только для
 | Нейтральный вопрос | PASS после исправления | Реальные B/B2 показали ложную интерпретацию «загорелся» как пожар. В B3 модель выбирала category/source/anchor, но окончательный вопрос сформирован сервером из дословной source-цитаты: без причины пожара и готового ответа. Сырой model-question не сохраняется. |
 | Stable questionId | PASS | questionId создаётся приложением; category, fixed purpose, anchorQuote и relatedSourceIds сохраняются вместе с вопросом. |
 | Не больше восьми вопросов | PASS | Guard проверен unit-тестом; восемь — аварийный предел, а не целевое число. |
-| «Не помню» не создаёт цикл | PASS | В D после ответа «Не помню» был задан другой вопрос; повтор первого вопроса запрещён и тестом, и state machine. |
+| «Не помню» не создаёт цикл и не становится фактом книги | PASS после исправления | В D после ответа «Не помню» задаётся вопрос другой категории, его anchor снова берётся из содержательного исходника. Сам неответ сохраняется в `InterviewAnswer`/`StorySource` как provenance, но исключается из читаемого текста истории. |
 | Preview before apply | PASS | Assembly/rephrase/patch сохраняются как `pending` preview; UI показывает «Сейчас / Предлагается» и требует «Применить новой версией» либо «Оставить как было». |
 | Assembly provenance | PASS | Каждый сегмент реальных E/F/G связан только с существующим source текущей истории; title/text не применяются автоматически. |
 | Rephrase safety | PASS после исправления | Первый G содержал посторонний token `Normally` и зафиксирован как FAIL evidence. После lexical anchor guard G v2 прошёл без новых Latin/number anchors; old/new были сохранены отдельно. Эвристика не заменяет human review. |
@@ -34,9 +34,22 @@ PR #12 подключает provider-independent AI-ядро только для
 | Additive persistence | PASS | Добавлена отдельная D1-таблица `ai_operations`; production migration не запускалась, существующие истории/revisions не переписываются. |
 | Browser interaction | PASS | В обычном Chrome на новой вымышленной истории пройден путь text → один нейтральный вопрос → text answer → «Собрать сейчас» → old/new preview → Keep → exact-fragment no-op → reload → book-state. Preview сохранился после reload; история 19 появилась сверху и повторно открылась с AI-tools. |
 | Browser safety states | PASS | При no-op предложении Apply disabled, Keep не меняет текст; после всех переходов browser console errors/warnings отсутствуют. Внешний trial checkbox оставался выключен, Alice requests не выполнялись. |
-| Responsive UI | PASS с фактическим viewport evidence | Desktop override отобразился как 1600 px; mobile overrides 390/360 — как 434/400 CSS px в extension runtime. На всех трёх состояниях `documentElement.scrollWidth <= innerWidth`, критические controls не обрезаны, AI book-state и mobile navigation читаемы. |
-| Полная автоматическая регрессия | PASS | Финальный цикл после privacy-gate и transcript-provenance fixes: 23 test files / 98 tests, lint, typecheck, production build и `git diff --check` — PASS. |
-| Security diff review | PASS | Проверены все 29 изменённых source-файлов: privacy gate, current-story isolation, ownership, бюджет/idempotence, output validation, append-only data safety, migration и secret exposure. Reportable findings после исправления server-side QA user/loopback gate отсутствуют; ключи и токены в tracked diff не обнаружены. |
+| Responsive UI | PASS с фактическим viewport evidence | Свежий визуальный проход выполнен на 360, 390, 768, 1024 и 1600 px. На 360/390 работает мобильная навигация и одноколоночная книга, на 768 — планшетная одноколоночная сетка, на 1024/1600 — sidebar и двух-/трёхколоночная сетка. Критические controls и текст карточек не обрезаны. |
+| Полная автоматическая регрессия | PASS | Финальный цикл после исправлений: 23 test files / 101 test, ESLint, TypeScript `--noEmit`, production build и `git diff --check` — PASS. |
+| Security diff review | PASS после исправления | Проверены все 30 изменённых executable/source-файлов. Найден и до финализации исправлен owner-scope дефект: привязка `revision_id` к `ai_operations` теперь требует одновременно `operation_id` и аутентифицированный `user_id`; добавлен regression test. После исправления reportable findings не осталось. Канонический terminal-scan сохранён в локальном артефакте; специализированный workbench не создал scan ID из-за ошибки декодирования кириллического Windows path, поэтому применён документированный fallback с полным parent review. |
+
+### 2.1. Свежий браузерный regression 04.09.2026
+
+На новом вымышленном неперсональном тексте `в субботу  я сделал макет` выполнен полный локальный deterministic-путь:
+
+1. Первый вопрос: `Ты упомянул «в субботу я сделал макет». Что это значит для тебя?`.
+2. После точного ответа `Не помню.` второй вопрос сменил категорию на `people` и сохранил anchor исходного рассказа: `Ты упомянул «в субботу я сделал макет». Чьё участие здесь важно сохранить?`.
+3. Assembly old/new содержал только `в субботу я сделал макет`; `Не помню.` остался в source/provenance и не попал в читаемый текст.
+4. Явный Apply создал новую revision. Rephrase предложил `В субботу я сделал макет.`; Apply изменил только форму; Undo новой revision восстановил прежний текст.
+5. Reload сохранил восстановленное состояние. Exact-fragment patch показал old/new preview; Keep не изменил историю. После подтверждения история появилась первой в книге и повторно открылась в reader.
+6. Browser console после прохода: 0 errors, 0 warnings.
+
+Live microphone не проверялся без физического/виртуального синтетического устройства: это ограничение не подменено декоративной имитацией. Голосовые state machines и сохранение материалов остаются покрыты автоматическими тестами предыдущего голосового этапа; новый PR #12 не изменяет этот transport.
 
 ## 3. Реальные синтетические сценарии Alice AI LLM
 
@@ -47,7 +60,7 @@ PR #12 подключает provider-independent AI-ядро только для
 | A — достаточно полный рассказ о бумажном кораблике | AI не повторил уже сообщённое и спросил о способе исправления порванного листа. Вопрос опирался на единственный source. Насколько этот дополнительный вопрос действительно нужен, оценивает Автор. | PASS объективно; PENDING USER 1–5 |
 | B — слабый/двусмысленный рассказ о фонаре | B/B2 обнаружили недопустимое усиление «загорелся» → «возгорание». После исправления B3 показал серверный нейтральный вопрос из дословной цитаты. | PASS после исправления; PENDING USER 1–5 |
 | C — 12 или 14 мая 2031 | AI явно спросил, какая дата верна, и не выбрал её самостоятельно. | PASS; PENDING USER 1–5 |
-| D — ответ «Не помню» | Следующий вопрос сменил направление и не повторил первый. | PASS; PENDING USER 1–5 |
+| D — ответ «Не помню» | Следующий вопрос сменил направление и не повторил первый; свежий regression дополнительно подтвердил, что `Не помню.` не используется как anchor и не попадает в читаемый текст, оставаясь в provenance. | PASS после regression fix; PENDING USER 1–5 |
 | E — длинный хаотичный рассказ | Повторы сжаты в связный текст; экран, карта, спор об указателе, проверенные метки и отсутствие вывода о причине сохранены. Новых имён/дат/событий не найдено; все пять сегментов ссылаются на точный source. | PASS; PENDING USER 1–5 |
 | F — «Собрать сейчас» до READY | После исправления exact source enum история собрана без интервью, с title, text и provenance единственного source. | PASS; PENDING USER 1–5 |
 | G — rephrase → patch → Undo | Первый rephrase честно FAIL из-за `Normally`; guard добавлен. G v2 сохранил факты/дату/число, patch заменил только «Картонный макет» → «Макет из картона», Undo восстановил текст до patch новой revision. | PASS после исправления; PENDING USER 1–5 |
@@ -72,7 +85,7 @@ PR #12 подключает provider-independent AI-ядро только для
 ## 5. Что остаётся до принятия
 
 - `PENDING USER ACCEPTANCE`: оценка Ильёй качества вопросов A–D и литературного результата E–G по шкале 1–5. Объективные контракты и браузерные переходы этим не подменяются.
-- Фактический Chrome QA подтвердил динамический вопрос, раннюю сборку, old/new preview, Keep, безопасный no-op patch, reload, book-state и responsive отсутствие overflow. Изменяющие Apply/Undo доказаны persisted интеграционным сценарием G v2 и автоматическими state-machine tests; субъективная визуальная оценка остаётся за Автором.
+- Фактический браузерный QA подтвердил динамический вопрос, смену категории после «Не помню», раннюю сборку без неответа в тексте, old/new preview, Apply, Keep, exact-fragment patch, append-only Undo, reload, book-state и responsive layout. Субъективная литературная оценка остаётся за Автором.
 - Public-Beta blockers из PRD не снимаются: production-quality STT, production auth/account, настоящий книжный PDF, payment/subscription/AI balance, privacy/legal readiness для реальных пользовательских данных.
 
 PR #12 не является разрешением отправлять Alice AI реальные личные истории и не является разрешением merge или production migration.

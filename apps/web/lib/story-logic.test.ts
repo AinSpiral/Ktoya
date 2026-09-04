@@ -24,6 +24,14 @@ describe('deterministic story assembly', () => {
     expect(story.privacy).toBe('private');
   });
 
+  it('keeps a non-answer in interview provenance without inserting it into the readable story', () => {
+    const answers = [{ id: 'a-no-recall', questionId: 'people', question: 'Кто был рядом?', answer: 'Не помню.' }];
+    const story = makeStory({ sourceText: 'Я собрал бумажный кораблик.', sourceMode: 'text', answers });
+    expect(story.text).toBe('Я собрал бумажный кораблик.');
+    expect(story.interviewAnswers).toEqual(answers);
+    expect(story.sources).toEqual(expect.arrayContaining([expect.objectContaining({ id: 'a-no-recall', text: 'Не помню.' })]));
+  });
+
   it('offers several non-repeating safe follow-up directions without inventing facts', () => {
     const first = nextFollowUpQuestion('Я помню этот день.', []);
     expect(first?.id).toBe('meaning');

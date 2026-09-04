@@ -33,6 +33,7 @@ export function contextForCaptureDraft(draft: CaptureDraft): AIStoryContextInput
     askedQuestions: (draft.interviewQuestions ?? []).map((question) => ({
       questionId: question.id,
       question: question.text,
+      category: question.category,
       answer: draft.interviewAnswers.find((answer) => answer.questionId === question.id)?.answer,
     })),
     currentTitle: draft.assembledDraft?.title,
@@ -55,7 +56,7 @@ export function contextForStory(story: Story): AIStoryContextInput {
       })
       .map((source) => ({ id: source.id, kind: source.kind, text: source.text, questionId: source.questionId })),
     askedQuestions: (story.interviewQuestions ?? story.interviewAnswers.map((answer) => ({ id: answer.questionId ?? answer.id, text: answer.question, category: 'gap' as const, purpose: 'Сохранённый вопрос', relatedSourceIds: [], createdAt: answer.createdAt ?? story.createdAt, provider: 'legacy', model: 'legacy' })))
-      .map((question) => ({ questionId: question.id, question: question.text, answer: story.interviewAnswers.find((answer) => answer.questionId === question.id)?.answer })),
+      .map((question) => ({ questionId: question.id, question: question.text, category: question.category, answer: story.interviewAnswers.find((answer) => answer.questionId === question.id)?.answer })),
     currentTitle: story.title,
     currentText: story.text,
     currentRevisionId: story.revisions.at(-1)?.id,

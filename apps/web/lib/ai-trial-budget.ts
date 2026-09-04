@@ -96,7 +96,7 @@ export async function failAiOperation(input: { db: D1Database; operationId: stri
     .bind(input.errorCode, input.inputTokens ?? null, input.outputTokens ?? null, input.actualCostRub == null ? null : microrub(input.actualCostRub), new Date().toISOString(), input.operationId).run();
 }
 
-export async function linkAiOperationRevision(db: D1Database, operationId: string, revisionId: string) {
-  await db.prepare(`UPDATE ai_operations SET created_revision_id = ?, updated_at = ? WHERE operation_id = ? AND status = 'completed' AND created_revision_id IS NULL`)
-    .bind(revisionId, new Date().toISOString(), operationId).run();
+export async function linkAiOperationRevision(db: D1Database, userId: string, operationId: string, revisionId: string) {
+  await db.prepare(`UPDATE ai_operations SET created_revision_id = ?, updated_at = ? WHERE operation_id = ? AND user_id = ? AND status = 'completed' AND created_revision_id IS NULL`)
+    .bind(revisionId, new Date().toISOString(), operationId, userId).run();
 }
