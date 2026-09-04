@@ -147,3 +147,11 @@ Trial реализован как отдельный privacy/billing конту�
 - D1-ledger резервирует максимальную стоимость до provider request. `completed`, `failed` и `uncertain` сохраняются отдельно; неопределённая операция не повторяется автоматически и учитывается по максимальной reservation.
 - Runtime-конфигурация проверяет точные cloud/folder/model/scope, свежесть readback тарифа, billing/IAM, срок ключа и защищённый QA user ID. Даже при пользовательской policy внешний provider открывается только этому ID на loopback hostname; production hostname и иной пользователь fail closed.
 - Миграция `0003_ai_story_core.sql` только добавляет таблицу операций. Production migration в PR #12 не запускалась; существующие StoryRevision, Source, аудио, transcript и provenance не переписываются.
+
+## 12. Локальный Stage B — совместимая основа книги
+
+`BookCompositionService` — pure local domain service, не сетевой AI adapter. `Book` получает optional `compositionPreviews` / `compositionRevisions`; старая структура и exact selected StoryRevision snapshots сохраняются append-only. Хранение проходит через существующий versioned book JSON shell; schema/D1 migration не требуется. `StoryEditDraft.purpose` отличает дополнение от edit-instruction; отсутствие поля означает legacy addition.
+
+Apply проверяет свежую структуру и selected revisions внутри save queue. Исключённые chapter memberships сохраняются. Undo восстанавливает структуру только если после apply не было иной структурной правки; новые тексты историй не откатываются. Подготовленную, но ещё не применённую структуру UI пока держит в памяти; уход со страницы теряет только это предложение, не книгу. Apply/Keep/Undo сохраняются и переживают reload.
+
+Техническое evidence и gap matrix: [18 — acceptance](18-PR12-AI-ACCEPTANCE-MATRIX.md). Будущий импорт готовых глав остаётся D045 / Stage 2 и не меняет текущего позиционирования.

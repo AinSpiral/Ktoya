@@ -107,3 +107,62 @@ PR #12 не является разрешением отправлять Alice A
 Root causes → fixes: refs старой записи → per-session buffer/cleanup/disposed guards; late recognition → sticky manual ownership; навигация во время записи → synchronous guards; нормализация reload без принятия server version → await и установка returned state; AI и autosave в разных очередях → одна очередь и merge свежих AI metadata; book addition на изменённую selection → explicit draft owner guard. Отдельные helper regression tests покрывают финализацию один раз, пустой Blob, duration, manual ownership и autosave metadata.
 
 Граница доказательств: принудительное закрытие до отправки Blob пока не имеет durable local journal; предупреждение beforeunload и честный failed/incomplete статус не равны гарантии восстановления несохранённого аудио. Safari/iOS, реальный микрофон и production STT не проверены этим контуром. Полный итоговый прогон после Stage B обязателен; текущие результаты не подменяют его.
+
+## 7. Stage B product gap matrix — 05.09.2026
+
+Статусы ниже описывают фактическую локальную реализацию, не выпуск на опубликованном Site.
+
+| Область | Статус | Реально сейчас / граница |
+|---|---|---|
+| Desktop / mobile UI | DONE (responsive Chrome) | 360/390/768/1024/1600; native device/Safari отдельно |
+| Голос, несколько фрагментов, смешанный ввод | DONE (transport) | Native recorder, оригиналы, порядок, reload, playback; не качество STT |
+| Transcription | PARTIAL / BLOCKED production | Browser draft + ручная проверка; production STT требует отдельного принятия |
+| Interview / один вопрос | DONE (контракты/flow) | Current-story anchored ASK/READY; deterministic направления ограничены |
+| Reflective вопросы | PARTIAL | Значение/люди/деталь/изменение; качество human A–D остаётся открытым |
+| Пять стилей | PARTIAL | UI, allowlist и provider contract; local fallback только типографика, новая literary acceptance не заявлена |
+| Ручная правка | DONE | Новые revision, исходники не заменяются |
+| AI correction / exact fragment | DONE (контракт) | Preview/apply/keep/undo; локальный arbitrary patch честно не угадывается |
+| Voice correction | PARTIAL | Native запись инструкции, отдельный owner draft, ручная проверка, exact fragment; не real-time разговор |
+| Preview / Apply / Keep / Undo | DONE | Story revisions + отдельный structural журнал; один последний structural undo |
+| Provenance / версии / аудио | DONE (saved data) | Источники и transcript revisions сохранены, archive обратим |
+| Принудительное закрытие до upload | PARTIAL | Beforeunload и честный статус; durable Blob journal ещё нет |
+| Несколько историй | DONE | Newest-first shelf, независимое чтение/дополнения и reload |
+| Book organisation | PARTIAL | Явный scope, ручной/год/тема preview, rename/reorder глав; split/merge/перенос отдельным PR |
+| Book AI / связь между историями | FUTURE | Local domain foundation; semantic gaps/contradictions не имитируются |
+| Голосовой диалог | PARTIAL / FUTURE realtime | Turn-based запись/стоп/вопрос/ответ; full-duplex не реализован |
+| Редактирование книги | PARTIAL | Проверенная структура/содержание и сохранение/undo; не универсальный редактор |
+| Manuscript import | FUTURE / Stage 2 | D045: совместимая модель, без отдельного текущего UI |
+| Экспорт | PARTIAL | JSON/Markdown по структуре, all-book A5 print/PDF; не самостоятельный production PDF |
+| Privacy | PARTIAL / BLOCKED public launch | Current-story scope, local isolation, private baseline; production auth/legal не приняты |
+| Security formal scan | BLOCKED tool | Desktop scanner failed before scanId: cp1251 UnicodeDecodeError on Cyrillic worktree path; не выдаётся за PASS |
+
+### Исправленные дефекты Stage B
+
+- Caption был sibling с absolute offsets: перенесён внутрь physical cover с padding; bounds проверяются независимо от document overflow.
+- Инструкция могла перейти к другой истории после async save: patch state имеет Story ID, UI и отправка проверяют совпадение владельца.
+- Markdown игнорировал chapter order: общий ordered exporter + regression test; PDF и содержание используют тот же подтверждённый порядок.
+- Print разделял заголовок главы и первую историю: исправлены page breaks, белый фон и нумерация; повторный визуальный PDF QA обязателен.
+- Новый E2E сперва снимал checkbox list до hydration: добавлено явное ожидание двух чекбоксов; это исправление теста, не продукта.
+- Сохранённая настройка стиля раньше не выбирала стиль редактора: подключён initialStyle; browser reload regression подтверждает `concise`. JSON/Markdown downloads, private radio, payment-not-connected, feedback и roadmap проверяются дополнительным smoke-путём 390px.
+
+Native voice доказательства не получены прямой вставкой Blob/state/D1. Синтетические tone WAV не являются диктовкой и не подтверждают STT. Browser external attempts блокируются и считаются; локальная e2e-конфигурация не подхватывает developer secrets. Formally exhaustive zero-bug guarantee не заявляется.
+
+### Итоговый полный цикл после source changes
+
+05.09.2026, final E2E start 02:19:56 MSK, duration 293.6 s:
+
+- **28 unit/integration files, 139 tests — PASS.** В том числе 21 BookCompositionService, 6 style contracts, ordered Markdown regression, recording lifecycle и autosave.
+- **2 E2E spec files, 14 tests — PASS**, skipped 0, unexpected 0, flaky 0. Пять visual journeys и девять voice scenarios.
+- Точные viewports: **360×800, 390×844, 768×1024, 1024×768, 1600×1000**. 50 screenshots: landing, closed book, capture, recording, question, story preview, reader, editing, book, structure preview на каждой ширине.
+- Cover nested/fit: true на пяти viewports. Caption отступы: mobile left32/right24/bottom27 px; остальные left39/right32/bottom27 px. Document width assertions и sibling primary-control nonoverlap PASS. Keyboard focus/reduced-motion smoke PASS; это не полный WCAG audit.
+- Native long recording: `durationMs=105295`; decoded **105.24 s**; после reload на 4/50/102 s найдены **440/660/880 Hz**, RMS 0.01852/0.01827/0.01813. Оригинал WebM/Opus сохранён. Обрезания около 90 s нет в этом тесте.
+- Voice answer сохраняет question ID / InterviewAnswer / Source / AudioFragment; mixed flow, manual transcript revisions, source archive/return, addition draft reload и newest-first проходят. Voice edit-instruction реально записана отдельным recorder-потоком на 390px, сохранена с Story ID и не меняет narrative text.
+- Дополнительно 390px: style default после reload, JSON/Markdown download events, private radio, недоступный family access, payment notice, feedback отдельно от книги, roadmap — PASS.
+- **Lint / typecheck / production build / diff-check — PASS.** High-confidence secret-pattern checks изменённых строк и 10 новых source files: 0 matches. Это bounded pattern scan, не доказательство отсутствия любого секрета.
+- Browser external attempts **0**. Console/pageerror assertions PASS с документированным исключением первого 404 `/api/state` для нового synthetic author. Terminal-only предупреждения FORCE_COLOR/NO_COLOR и vinext static route classification не являются runtime console errors сайта.
+- **Alice AI / SpeechKit / другие paid AI-STT-TTS requests = 0 в этом запуске.** Предыдущие A–G evidence не выдаются за новые вызовы.
+- Окончательный print PDF: **3 страницы A5**, титул + обе истории, page numbers, кириллица, без лишних разделительных страниц. Poppler PNG просмотрен; warnings о путях Bulgarian/Greek/Thai mappings не помешали корректному русскому render. Это synthetic QA, не production PDF acceptance.
+
+Артефакты на диске C, вне Git: `apps/web/work/qa-life-book-20260905/results/` (Playwright JSON, 50 screenshots, long proof attachment, sample book PDF); `work/qa-life-book-20260905/print-*.png`. Полный регрессионный набор запускается `pnpm run test` и `pnpm run test:e2e:voice`. Секреты, synthetic media и generated state не коммитятся.
+
+Формальный desktop Security Diff Scan не получил scanId: запуск упал в `workbench_target.py` / cp1251 decoding кириллического Git path. Настройки инструмента не менялись, успешный scan не подменялся другим отчётом. Независимые read-only code/data-loss reviews нашли и помогли исправить lifecycle, ownership и export defects; это не завершённый формальный Security scan и не разрешение публичного запуска.

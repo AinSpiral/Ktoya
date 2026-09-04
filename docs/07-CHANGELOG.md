@@ -7,6 +7,13 @@
 
 # [Не выпущено]
 
+## 05.09.2026 — локальный Stage B: Life Book Experience
+
+- Деревянная procedural/SVG обложка с caption внутри, слои леса и адаптивный editor; пять narrative style contracts, owner-bound голосовая инструкция без попадания в рассказ.
+- Локальный BookCompositionService: selected sources, confirmed metadata, preview/rename/reorder/apply/keep/undo; сохранение старой структуры, текстов и provenance.
+- Markdown и A5 print всей книги следуют порядку глав. Системная печать не переименована в production PDF integration.
+- Статусы и evidence: [18 — acceptance](18-PR12-AI-ACCEPTANCE-MATRIX.md#7-stage-b-product-gap-matrix--05092026). D057 фиксирует local-only release boundary; D045 manuscript направление сохранено.
+
 ## 05.09.2026 — локальный Stage A: native voice QA и восстановление
 
 - Добавлен изолированный Playwright/Chromium fake-microphone контур с offline WAV, reload/playback/provenance и 105-секундной проверкой сохранённого оригинала.
