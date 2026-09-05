@@ -12,4 +12,3 @@ export async function POST(request: NextRequest) {
   response.headers.set('cache-control', 'no-store');
   return response;
 }
-

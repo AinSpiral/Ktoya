@@ -16,7 +16,6 @@ function base64url(bytes: Uint8Array) {
   bytes.forEach((byte) => { binary += String.fromCharCode(byte); });
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
 }
-
 function fromBase64url(value: string) {
   const padded = value.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - value.length % 4) % 4);
   const binary = atob(padded);
@@ -110,4 +109,3 @@ export async function anonymizedActorKey(request: Request, secret: string, windo
   const address = request.headers.get('cf-connecting-ip') ?? request.headers.get('x-forwarded-for')?.split(',', 1)[0]?.trim() ?? 'unknown';
   return base64url(await hmac(secret, `${windowKey}:${address}`)).slice(0, 32);
 }
-

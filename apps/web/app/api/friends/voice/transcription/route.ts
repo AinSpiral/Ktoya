@@ -6,4 +6,3 @@ export async function POST() {
     message: 'Внешняя расшифровка в Friends Beta выключена. Аудио остаётся в приватном TEST-хранилище.',
   }, { status: 503 });
 }
-

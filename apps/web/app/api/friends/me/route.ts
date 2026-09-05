@@ -11,4 +11,3 @@ export async function GET(request: NextRequest) {
     name: identity.source === 'friends' ? 'Друг КтоЯ' : 'Тестовый автор',
   }, { headers: { 'cache-control': 'private, no-store' } });
 }
-

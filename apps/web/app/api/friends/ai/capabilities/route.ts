@@ -9,4 +9,3 @@ export async function GET() {
     message: 'Friends Beta не передаёт истории внешнему AI. Работает только локальный детерминированный режим.',
   }, { headers: { 'cache-control': 'no-store' } });
 }
-
