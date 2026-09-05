@@ -45,16 +45,17 @@ for (const width of [360,390,768,1024,1600]) test(`life book responsive ${width}
   page.on('dialog', dialog => dialog.accept());
   try {
     await page.goto('/');
-    await expect(page.locator('.book-caption')).toBeVisible();
-    const containment = await page.locator('.book-cover').evaluate(cover => {
-      const caption = cover.querySelector('.book-caption')!; const a = cover.getBoundingClientRect(), b = caption.getBoundingClientRect();
-      return { nested: cover.contains(caption), left: b.left-a.left, right:a.right-b.right, top:b.top-a.top,bottom:a.bottom-b.bottom, fits: caption.scrollHeight <= caption.clientHeight };
+    await expect(page.locator('.living-world-forest')).toHaveAttribute('data-ready', 'true');
+    await expect(page.locator('.living-cover-plane')).toBeVisible();
+    const containment = await page.locator('.living-cover-plane').evaluate(cover => {
+      const caption = cover.querySelector('p')!; const a = cover.getBoundingClientRect(), b = caption.getBoundingClientRect();
+      return { nested: cover.contains(caption), left: b.left-a.left, right:a.right-b.right, top:b.top-a.top,bottom:a.bottom-b.bottom, fits: cover.scrollHeight <= cover.clientHeight + 1 && cover.scrollWidth <= cover.clientWidth + 1 };
     });
     expect(containment.nested && containment.fits).toBe(true);
-    for (const value of [containment.left,containment.right,containment.top,containment.bottom]) expect(value).toBeGreaterThanOrEqual(18);
+    for (const value of [containment.left,containment.right,containment.top,containment.bottom]) expect(value).toBeGreaterThanOrEqual(8);
     await info.attach('cover-bounds',{body:JSON.stringify(containment),contentType:'application/json'});
     await snapshot(page,info,'01-landing');
-    await page.locator('.book-scene').screenshot({path:info.outputPath('02-closed-book.png')});
+    await page.locator('.living-book-zone').screenshot({path:info.outputPath('02-closed-book.png')});
     await page.keyboard.press('Tab');
     expect(await page.evaluate(() => document.activeElement?.tagName)).not.toBe('BODY');
     await capture(page);

@@ -1,11 +1,19 @@
 # История изменений документации KTOYA
 
-Версия документа: 1.4
+Версия документа: 1.5
 Статус: действующий журнал изменений документации.
 
 ---
 
 # [Не выпущено]
+
+## 05.09.2026 — локальный Living World art-direction candidate
+
+- Hero собран как единая реалистичная физическая сцена: деревянная книга находится в корнях старого дерева; свет, кора, мох, латунь и страницы принадлежат одному пространству.
+- Добавлены независимые desktop/mobile masters без текста, responsive AVIF/WebP pipeline, HTML-типографика обложки и procedural decode fallback.
+- Нижний landing продолжен как сдержанная последовательность страниц живой книги; family/roots секция получила отдельный original asset.
+- Локальный visual suite расширен до шести viewport и проверяет overflow, cover bounds, CTA, переход/reload, fallback, geometry reservation, reduced motion и отсутствие внешних provider-вызовов. Подробности: [21 — Living World](21-LIVING-WORLD-ART-DIRECTION.md).
+- Изменение остаётся отдельным локальным кандидатом: без push, merge, deployment, production/main и без изменений Friends Beta data/AI/STT boundaries.
 
 ## 05.09.2026 — локальный Forest art direction pass
 

@@ -4,10 +4,11 @@ import { expect, test, type Browser, type Page } from '@playwright/test';
 import { createEmptyState } from '../lib/domain';
 
 const BASE_URL = 'http://127.0.0.1:3101';
-const OUTPUT_DIRECTORY = resolve('outputs/hybrid-art/final');
+const OUTPUT_DIRECTORY = resolve('outputs/living-world/final');
 const VIEWPORTS = [
   { width: 360, height: 800, touch: true },
   { width: 390, height: 844, touch: true },
+  { width: 440, height: 956, touch: true },
   { width: 768, height: 1024, touch: true },
   { width: 1024, height: 768, touch: false },
   { width: 1600, height: 1000, touch: false },
@@ -113,6 +114,11 @@ async function newIsolatedContext(
     }
   });
 
+  const login = await context.request.post('/api/auth/login', {
+    data: { code: 'e2e-friend-access', role: 'tester' },
+  });
+  expect(login.ok(), 'local visual fixture must authenticate with the TEST-only code').toBe(true);
+
   // Persist only an empty synthetic account in the isolated local D1 fixture.
   // GET /api/state intentionally returns 404 for an account with no stored row;
   // seeding makes the runtime-error audit strict without filtering console errors.
@@ -142,31 +148,37 @@ async function assertNoHorizontalOverflow(page: Page) {
   const dimensions = await page.evaluate(() => ({
     scrollWidth: document.documentElement.scrollWidth,
     viewportWidth: window.innerWidth,
+    widths: ['html', 'body', 'main', '.landing', '.forest-masthead', '.forest-masthead .hero', '.meaning-strip', '.support-section', '.living-legacy', '.privacy-section', '.roadmap-teaser', '.final-cta']
+      .map(selector => {
+        const element = document.querySelector<HTMLElement>(selector);
+        if (!element) return `${selector}=missing`;
+        const rect = element.getBoundingClientRect();
+        return `${selector} client=${element.clientWidth} scroll=${element.scrollWidth} rect=${rect.left.toFixed(1)}..${rect.right.toFixed(1)}`;
+      }),
+    offenders: Array.from(document.querySelectorAll<HTMLElement>('body *')).flatMap((element) => {
+      const rect = element.getBoundingClientRect();
+      return rect.left < -1 || rect.right > window.innerWidth + 1
+        ? [{ label: `${element.tagName.toLowerCase()}.${typeof element.className === 'string' ? element.className : ''}`, left: rect.left, right: rect.right }]
+        : [];
+    }).sort((a, b) => Math.max(b.right - window.innerWidth, -b.left) - Math.max(a.right - window.innerWidth, -a.left))
+      .slice(0, 12).map(item => `${item.label}: ${item.left.toFixed(1)}..${item.right.toFixed(1)}`),
   }));
-  expect(dimensions.scrollWidth, `document width at ${dimensions.viewportWidth}px`).toBeLessThanOrEqual(dimensions.viewportWidth);
+  expect(dimensions.scrollWidth, `document width at ${dimensions.viewportWidth}px; widths: ${dimensions.widths.join(' | ')}; offenders: ${dimensions.offenders.join(', ')}`).toBeLessThanOrEqual(dimensions.viewportWidth);
 }
 
 async function assertHeroIsUsable(page: Page) {
-  await expect(page.locator('.hybrid-forest')).toHaveAttribute('data-ready', 'true');
-  await expect(page.locator('.hybrid-book-slot')).toHaveAttribute('data-ready', 'true');
-  const selected = await page.locator('.hybrid-forest img').evaluate((img) => (img as HTMLImageElement).currentSrc);
-  const titleStyle = await page.locator('.hybrid-cover-title').evaluate(element => {
-    const style = getComputedStyle(element);
-    return { fontSize: parseFloat(style.fontSize), position: style.position, opacity: style.opacity,
-      fits: element.scrollWidth <= element.clientWidth && element.scrollHeight <= element.clientHeight };
-  });
-  expect(titleStyle, 'legacy paragraph CSS must not displace or miniaturize the cover title')
-    .toEqual({ fontSize: 84, position: 'relative', opacity: '1', fits: true });
-  expect(selected).toContain(page.viewportSize()!.width <= 900 ? 'forest-mobile-' : 'forest-desktop-');
+  await expect(page.locator('.living-world-forest')).toHaveAttribute('data-ready', 'true');
+  const selected = await page.locator('.living-world-forest img').evaluate((img) => (img as HTMLImageElement).currentSrc);
+  expect(selected).toContain(page.viewportSize()!.width <= 900 ? 'hero-mobile-' : 'hero-desktop-');
   const imageResources = await page.evaluate(() => performance.getEntriesByType('resource')
-    .map(entry => entry.name).filter(name => name.includes('/art/life-book/')));
+    .map(entry => entry.name).filter(name => name.includes('/art/living-world/')));
   expect(imageResources.some(name => name.endsWith('.png')), 'masters must never be delivered to the browser').toBe(false);
   const masthead = page.locator('.forest-masthead');
   await expect(masthead).toBeVisible();
   await expect(masthead.locator('.forest-world')).toHaveAttribute('aria-hidden', 'true');
-  await expect(masthead.locator('.book-scene')).toHaveAttribute('aria-hidden', 'true');
+  await expect(masthead.locator('.living-book-zone')).toHaveAttribute('aria-hidden', 'true');
 
-  const pointerEvents = await masthead.locator('.forest-world, .book-scene').evaluateAll((elements) =>
+  const pointerEvents = await masthead.locator('.living-world-forest, .living-book-zone').evaluateAll((elements) =>
     elements.map((element) => getComputedStyle(element).pointerEvents),
   );
   expect(pointerEvents).toEqual(['none', 'none']);
@@ -180,15 +192,16 @@ async function assertHeroIsUsable(page: Page) {
 
   const foregroundGeometry = await masthead.evaluate((mastheadElement) => {
     const headingElement = mastheadElement.querySelector('.hero h1');
-    const bookElement = mastheadElement.querySelector('.book-scene');
-    if (!(headingElement instanceof HTMLElement) || !(bookElement instanceof HTMLElement)) {
-      throw new Error('Expected exactly one hero heading and one book scene');
+    const coverElement = mastheadElement.querySelector('.living-cover-plane');
+    if (!(headingElement instanceof HTMLElement) || !(coverElement instanceof HTMLElement)) {
+      throw new Error('Expected exactly one hero heading and one living book cover');
     }
     const headingRect = headingElement.getBoundingClientRect();
     const headingContent = document.createRange();
     headingContent.selectNodeContents(headingElement);
     const headingContentRect = headingContent.getBoundingClientRect();
-    const bookRect = bookElement.getBoundingClientRect();
+    const coverRect = coverElement.getBoundingClientRect();
+    const mastheadRect = mastheadElement.getBoundingClientRect();
     const bounds = (rect: DOMRect) => ({
       left: rect.left,
       top: rect.top,
@@ -201,7 +214,8 @@ async function assertHeroIsUsable(page: Page) {
       headingContent: bounds(headingContentRect),
       headingScrollFits: headingElement.scrollWidth <= headingElement.clientWidth + 1
         && headingElement.scrollHeight <= headingElement.clientHeight + 1,
-      book: bounds(bookRect),
+      masthead: bounds(mastheadRect),
+      cover: bounds(coverRect),
     };
   });
   const insideViewport = (rect: typeof foregroundGeometry.heading) => rect.left >= 0
@@ -209,60 +223,30 @@ async function assertHeroIsUsable(page: Page) {
     && rect.right <= foregroundGeometry.viewport.width
     && rect.bottom <= foregroundGeometry.viewport.height;
   expect(insideViewport(foregroundGeometry.heading), 'the full hero heading box must be inside the viewport').toBe(true);
-  expect(insideViewport(foregroundGeometry.book), 'the full transformed book scene must be inside the viewport').toBe(true);
   expect(foregroundGeometry.headingScrollFits, 'the hero heading must not clip or overflow its text box').toBe(true);
   expect(foregroundGeometry.headingContent.left, 'heading glyphs must not clip on the left').toBeGreaterThanOrEqual(foregroundGeometry.heading.left - 1);
   expect(foregroundGeometry.headingContent.top, 'heading glyphs must not clip on the top').toBeGreaterThanOrEqual(foregroundGeometry.heading.top - 1);
   expect(foregroundGeometry.headingContent.right, 'heading glyphs must not clip on the right').toBeLessThanOrEqual(foregroundGeometry.heading.right + 1);
   expect(foregroundGeometry.headingContent.bottom, 'heading glyphs must not clip on the bottom').toBeLessThanOrEqual(foregroundGeometry.heading.bottom + 1);
 
-  const captionGeometry = await masthead.locator('.book-caption').evaluate((caption) => {
-    const cover = caption.closest('.book-cover');
-    if (!(cover instanceof HTMLElement)) throw new Error('.book-caption must be nested inside .book-cover');
-    if (!(caption instanceof HTMLElement)) throw new Error('.book-caption must be an HTML element');
-    const mastheadElement = cover.closest('.forest-masthead');
-    if (!(mastheadElement instanceof HTMLElement)) throw new Error('.book-cover must be nested inside .forest-masthead');
-
-    let offsetLeft = 0;
-    let offsetTop = 0;
-    let offsetNode: HTMLElement | null = caption;
-    while (offsetNode && offsetNode !== cover) {
-      offsetLeft += offsetNode.offsetLeft;
-      offsetTop += offsetNode.offsetTop;
-      offsetNode = offsetNode.offsetParent as HTMLElement | null;
-    }
-    if (offsetNode !== cover) throw new Error('.book-cover must be the caption positioning ancestor');
-
-    let matrix = new DOMMatrixReadOnly();
-    let transformedNode: HTMLElement | null = cover;
-    while (transformedNode) {
-      const transform = getComputedStyle(transformedNode).transform;
-      if (transform !== 'none') matrix = new DOMMatrixReadOnly(transform).multiply(matrix);
-      if (transformedNode === mastheadElement) break;
-      transformedNode = transformedNode.parentElement;
-    }
-    const horizontalScale = Math.hypot(matrix.a, matrix.b);
-    const verticalScale = Math.hypot(matrix.c, matrix.d);
-    const localInsets = {
-      left: offsetLeft,
-      top: offsetTop,
-      right: cover.clientWidth - offsetLeft - caption.offsetWidth,
-      bottom: cover.clientHeight - offsetTop - caption.offsetHeight,
-    };
+  const coverGeometry = await masthead.locator('.living-cover-plane').evaluate((cover) => {
+    if (!(cover instanceof HTMLElement)) throw new Error('.living-cover-plane must be an HTML element');
+    const coverRect = cover.getBoundingClientRect();
+    const children = Array.from(cover.children).filter((child): child is HTMLElement => child instanceof HTMLElement);
     return {
-      transformedInsets: {
-        left: localInsets.left * horizontalScale,
-        top: localInsets.top * verticalScale,
-        right: localInsets.right * horizontalScale,
-        bottom: localInsets.bottom * verticalScale,
-      },
-      contentFits: caption.scrollWidth <= caption.clientWidth && caption.scrollHeight <= caption.clientHeight,
+      contentFits: cover.scrollWidth <= cover.clientWidth + 1 && cover.scrollHeight <= cover.clientHeight + 1,
+      childrenInside: children.every((child) => {
+        const rect = child.getBoundingClientRect();
+        return rect.left >= coverRect.left - 2 && rect.top >= coverRect.top - 2
+          && rect.right <= coverRect.right + 2 && rect.bottom <= coverRect.bottom + 2;
+      }),
+      insideMasthead: coverRect.left >= 0 && coverRect.right <= window.innerWidth
+        && coverRect.top >= 0 && coverRect.bottom <= document.querySelector('.forest-masthead')!.getBoundingClientRect().bottom + 2,
     };
   });
-  expect(captionGeometry.contentFits, 'book caption content must fit its box').toBe(true);
-  for (const [edge, distance] of Object.entries(captionGeometry.transformedInsets)) {
-    expect(distance, `book caption transformed ${edge} safe inset`).toBeGreaterThanOrEqual(18);
-  }
+  expect(coverGeometry.contentFits, 'book cover text must fit the cover plane').toBe(true);
+  expect(coverGeometry.childrenInside, 'every cover label must stay inside the cover plane').toBe(true);
+  expect(coverGeometry.insideMasthead, 'the composed cover plane must stay inside the masthead').toBe(true);
 
   const hitTest = await masthead.locator('a[href], button, input, select, textarea').evaluateAll((elements) => {
     const controls = elements
@@ -398,6 +382,17 @@ for (const viewport of VIEWPORTS) {
         fullPage: false,
         animations: 'disabled',
       });
+      if ([390, 768, 1600].includes(viewport.width)) {
+        const ancestry = page.locator('.living-ancestry-figure img');
+        await ancestry.scrollIntoViewIfNeeded();
+        await expect(ancestry).toHaveJSProperty('complete', true);
+        await page.evaluate(() => window.scrollTo(0, 0));
+        await page.screenshot({
+          path: resolve(OUTPUT_DIRECTORY, `full-${viewport.width}.png`),
+          fullPage: true,
+          animations: 'disabled',
+        });
+      }
 
       if (viewport.touch) {
         const before = await readParallax(page);
@@ -454,13 +449,13 @@ test('reduced motion disables forest animation and resets parallax', async ({ br
     await page.mouse.move(masthead!.x + masthead!.width * 0.9, masthead!.y + masthead!.height * 0.8);
     expect(await readParallax(page)).toEqual({ x: 0, y: 0 });
 
-    const motionStyles = await page.locator('.forest-far, .forest-middle, .forest-near, .book-scene, .hybrid-forest picture, .raster-book-object').evaluateAll((elements) =>
+    const motionStyles = await page.locator('.forest-far, .forest-middle, .forest-near, .living-world-forest picture').evaluateAll((elements) =>
       elements.map((element) => {
         const style = getComputedStyle(element);
         return { animationName: style.animationName, transform: style.transform };
       }),
     );
-    expect(motionStyles).toHaveLength(6);
+    expect(motionStyles).toHaveLength(4);
     for (const style of motionStyles) {
       expect(style.animationName, 'decorative animation must be disabled for reduced motion').toBe('none');
       expect(style.transform, 'parallax transform must be reset for reduced motion').toBe('none');
@@ -476,14 +471,13 @@ for (const width of [390, 1024]) {
     const { context, audit } = await newIsolatedContext(browser, { width, height: width === 390 ? 844 : 768 }, { touch: width === 390 });
     // A successful HTTP response with undecodable image bytes exercises native onError
     // without masking console errors from unrelated application failures.
-    await context.route('**/art/life-book/**', route => route.fulfill({ status: 200, contentType: 'image/png', body: 'invalid image fixture' }));
+    await context.route('**/art/living-world/**', route => route.fulfill({ status: 200, contentType: 'image/png', body: 'invalid image fixture' }));
     const page = await context.newPage();
     auditRuntimeErrors(page, audit);
     try {
       await page.goto('/#landing', { waitUntil: 'networkidle' });
-      await expect(page.locator('.hybrid-forest')).toHaveAttribute('data-ready', 'false');
-      await expect(page.locator('.hybrid-book-slot')).toHaveAttribute('data-ready', 'false');
-      await expect(page.locator('.book-scene:visible')).toHaveCount(1);
+      await expect(page.locator('.living-world-forest')).toHaveAttribute('data-ready', 'false');
+      await expect(page.locator('.living-procedural-fallback .book-scene')).toBeVisible();
       await expect(page.locator('.walnut-surface')).toBeVisible();
       await assertNoHorizontalOverflow(page);
       await assertVisibleKeyboardFocus(page);
@@ -497,24 +491,23 @@ test('art loading reserves geometry and preload selects only the matching forest
   const { context, audit } = await newIsolatedContext(browser, { width: 390, height: 844 }, { touch: true });
   let release!: () => void;
   const imagesAllowed = new Promise<void>(resolve => { release = resolve; });
-  await context.route('**/art/life-book/**', async route => { await imagesAllowed; await route.continue(); });
+  await context.route('**/art/living-world/**', async route => { await imagesAllowed; await route.continue(); });
   const page = await context.newPage();
   auditRuntimeErrors(page, audit);
   try {
     await page.goto('/#landing', { waitUntil: 'domcontentloaded' });
     await page.evaluate(() => document.fonts.ready);
-    const before = await page.locator('.hybrid-book-slot').boundingBox();
+    const before = await page.locator('.living-book-zone').boundingBox();
     const ctaBefore = await page.locator('.forest-masthead').getByRole('button', { name: 'Начать свою книгу' }).boundingBox();
     release();
-    await expect(page.locator('.hybrid-book-slot')).toHaveAttribute('data-ready', 'true');
-    await expect(page.locator('.hybrid-forest')).toHaveAttribute('data-ready', 'true');
-    const after = await page.locator('.hybrid-book-slot').boundingBox();
+    await expect(page.locator('.living-world-forest')).toHaveAttribute('data-ready', 'true');
+    const after = await page.locator('.living-book-zone').boundingBox();
     const ctaAfter = await page.locator('.forest-masthead').getByRole('button', { name: 'Начать свою книгу' }).boundingBox();
     expect(after).toEqual(before);
     expect(ctaAfter).toEqual(ctaBefore);
     const resources = await page.evaluate(() => performance.getEntriesByType('resource').map(entry => entry.name));
-    expect(resources.filter(name => name.includes('forest-desktop-'))).toEqual([]);
-    expect(resources.filter(name => name.includes('forest-mobile-'))).toHaveLength(1);
+    expect(resources.filter(name => name.includes('hero-desktop-'))).toEqual([]);
+    expect(resources.filter(name => name.includes('hero-mobile-'))).toHaveLength(1);
     assertAuditIsClean(audit);
   } finally { release(); await context.close(); }
 });

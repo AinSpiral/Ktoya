@@ -93,6 +93,8 @@ KTOYA может использовать их как первый содерж�
 
 Локальный hybrid hero, D059: [20 — оригинальные assets, pipeline и координаты](20-HYBRID-HERO-ASSETS.md). Не опубликован; новый formal security gate не закрыт при отсутствии официального scan tool в среде.
 
+Локальный Living World candidate, D060: [21 — единая физическая сцена, original assets, responsive QA и границы](21-LIVING-WORLD-ART-DIRECTION.md). Не опубликован и не меняет Friends Beta deployment.
+
 ## 8. Правило обновления
 
 После значимого изменения обновляются только затронутые роли:

@@ -9,10 +9,11 @@ import type { VoiceProviderCapabilities } from '@/lib/voice-provider-registry';
 import { deriveSpeechKitWav } from '@/lib/audio-derived';
 import { createRecordingBuffer, mergeRecognitionUpdate, restoreInterruptedFragment } from '@/lib/recording-lifecycle';
 import { mergeCaptureAutosave } from '@/lib/capture-autosave';
-import { HybridBookArtwork, HybridForestBackdrop } from './hybrid-hero';
+import { LivingAncestryImage, LivingBookArtwork, LivingWorldBackdrop } from './living-world';
 import './life-book.css';
 import './forest-hero.css';
 import './hybrid-hero.css';
+import './living-world.css';
 import { STORY_STYLES, type NarrativeStyle } from '@/lib/story-styles';
 import { BookCompositionPanel, PrintableBook } from './book-composition-panel';
 import { FriendsAccessGate } from './friends-access-gate';
@@ -1198,8 +1199,8 @@ function LifeBookApp() {
     return (
       <main className="landing" id="top">
         <div className="forest-masthead">
-        <HybridForestBackdrop />
-        <header className="site-header">
+          <LivingWorldBackdrop />
+          <header className="site-header">
           <a className="wordmark" href="#top" aria-label="КтоЯ — на главную">КтоЯ<span>.</span></a>
           <nav aria-label="Главная навигация"><a href="#how">Как работает</a><a href="#privacy">Приватность</a><button className="header-login" onClick={() => appState.stories.length ? openWorkspace() : setView('first-choice')}>{appState.stories.length ? 'Моя книга' : 'Войти'}</button></nav>
         </header>
@@ -1210,7 +1211,7 @@ function LifeBookApp() {
             <p className="hero-lead">Рассказывай, как вспоминается.<br className="desktop-breath" /> Сохрани свой голос, близких и мгновения —<br className="desktop-breath" /> в книге, которую хочется передать.</p>
             <div className="hero-actions"><button className="button-primary" onClick={() => setView('first-choice')}>Начать свою книгу</button>{hasCaptureDraft && <button className="button-secondary" onClick={() => setView('capture')}>Продолжить сохранённый черновик</button>}<span className="privacy-note"><span>●</span> Всё созданное видно только тебе</span></div>
           </div>
-          <HybridBookArtwork />
+          <LivingBookArtwork />
         </section>
         <div className="forest-footer-note" aria-hidden="true"><span>У каждой жизни есть свои корни.</span><span>И истории, которые продолжают расти.</span></div>
         </div>
@@ -1218,7 +1219,7 @@ function LifeBookApp() {
         <section className="editorial-section how" id="how"><p className="eyebrow">Как работает</p><h2>Из живого рассказа —<br />в страницу твоей книги</h2><div className="process-grid"><article><b>1</b><h3>Рассказать</h3><p>Голосом или текстом, как вспоминается. Красиво говорить не нужно.</p></article><article><b>2</b><h3>Раскрыть</h3><p>Один бережный вопрос помогает заметить то, что действительно важно.</p></article><article><b>3</b><h3>Сохранить</h3><p>Проверь каждое слово, исправь и только потом добавь историю в книгу.</p></article></div></section>
         <section className="truth-section"><div><p className="eyebrow">Честный ИИ</p><h2>Помогает услышать тебя.<br />Не сочиняет тебя.</h2></div><div className="truth-note"><span>“</span><p>Если факта нет в твоём рассказе, его не будет и в истории. Первая Beta собирает текст детерминированно — только из введённых тобой слов.</p><b>Составлено только из твоих слов</b></div></section>
         <section className="support-section"><p className="eyebrow">Прошлое как опора настоящего</p><h2>В книге остаётся не только то, что было трудно.</h2><div className="word-river"><span>Достижения</span><span>Любовь</span><span>Решения</span><span>Творчество</span><span>Рост</span><span>Преодоление</span></div></section>
-        <section className="legacy-section"><div className="legacy-shape" /><div><p className="eyebrow">Семья и род</p><h2>Передай не только даты.<br />Передай живого человека.</h2><p>Сегодня это личная закрытая книга. В будущем Автор сам решит, кому и что открыть. Семейное пространство — следующий этап, а не обещание готовой функции Beta.</p></div></section>
+        <section className="legacy-section living-legacy"><LivingAncestryImage /><div><p className="eyebrow">Семья и род</p><h2>Передай не только даты.<br />Передай живого человека.</h2><p>Сегодня это личная закрытая книга. В будущем Автор сам решит, кому и что открыть. Семейное пространство — следующий этап, а не обещание готовой функции Beta.</p></div></section>
         <section className="privacy-section" id="privacy"><div className="privacy-seal"><span>Только</span><strong>ты</strong><span>решаешь</span></div><div><p className="eyebrow">Приватность — не мелкий шрифт</p><h2>Всё закрыто по умолчанию.</h2><p>Истории принадлежат Автору. Доступ не открывается автоматически. Экспорт позволяет забрать книгу в переносимом виде.</p></div></section>
         <section className="roadmap-teaser"><p className="eyebrow">Путь КтоЯ</p><div className="roadmap-line"><strong>Бета</strong><span>Умная книга</span><span>Мир пазлов</span><span>Карта человека</span><span>Семья</span><span>Социальная сеть</span><span>Наследие</span></div></section>
         <section className="final-cta"><p className="eyebrow">Первая страница уже рядом</p><h2>Начни с одной истории,<br />которую не хочется потерять.</h2><button className="button-primary" onClick={() => setView('first-choice')}>Начать свою книгу</button></section>
