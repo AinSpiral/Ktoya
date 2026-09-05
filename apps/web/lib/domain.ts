@@ -1,4 +1,4 @@
-export type StorySourceKind = 'typed' | 'transcript' | 'interview-answer' | 'manual-edit' | 'imported-draft';
+export type StorySourceKind = 'typed' | 'transcript' | 'interview-answer' | 'manual-edit' | 'ai-suggestion' | 'imported-draft';
 export type StoryStyle = 'natural' | 'warm' | 'concise' | 'documentary';
 export type PrivacyLevel = 'private' | 'selected' | 'book';
 export type ChapterKind = 'life-stories' | 'imported-manuscript';
@@ -6,6 +6,8 @@ export type TranscriptProviderKind = 'browser-speech-recognition' | 'manual' | '
 export type TranscriptRevisionKind = 'raw' | 'improved';
 export type VoiceJobStatus = 'queued' | 'processing' | 'ready' | 'failed';
 export type ExternalVoiceProcessingPolicy = 'qa-nonpersonal-trial' | 'user-content-approved';
+/** General external-processing policy. The voice alias remains for saved-state compatibility. */
+export type ExternalProcessingPolicy = ExternalVoiceProcessingPolicy;
 export type AudioDerivationKind = 'remux-ogg-opus' | 'transcode-pcm-wav';
 export type TranscriptProcessingMode = 'faithful' | 'literature-derived';
 
@@ -129,6 +131,22 @@ export interface InterviewAnswer {
   transcriptRevisionIds?: string[];
 }
 
+export type InterviewQuestionCategory = 'gap' | 'contradiction' | 'meaning' | 'detail' | 'change' | 'people' | 'time-place';
+
+/** The application, never the model, assigns the stable question id. */
+export interface InterviewQuestion {
+  id: string;
+  text: string;
+  category: InterviewQuestionCategory;
+  purpose: string;
+  relatedSourceIds: string[];
+  anchorQuote?: string;
+  createdAt: string;
+  operationId?: string;
+  provider: string;
+  model: string;
+}
+
 export interface StoryTitleRevision {
   id: string;
   title: string;
@@ -186,6 +204,8 @@ export interface CaptureDraftFragment {
   rawTranscript?: string;
   /** Currently selected working text; manual edits never replace rawTranscript. */
   transcript: string;
+  /** Sticky author ownership: late browser results must never regain write access. */
+  manuallyEdited?: boolean;
   /** Persisted append-only history exists before the story is assembled. */
   transcriptRevisions?: TranscriptRevision[];
   /** Provider retries are preserved even when the author is still in capture/review. */
@@ -207,10 +227,15 @@ export interface CaptureDraft {
   storyFragments: CaptureDraftFragment[];
   answerFragments: CaptureDraftFragment[];
   voiceAnswerDrafts: VoiceAnswerCaptureDraft[];
+  /** Questions already asked are persisted so reload cannot repeat them. */
+  interviewQuestions?: InterviewQuestion[];
+  aiReadyDecisions?: Array<{ operationId: string; reason: string; provider: string; model: string; createdAt: string }>;
   /** The review-stage composition is saved separately from immutable source material. */
   assembledDraft?: Story;
   capturePurpose: 'story' | 'answer';
   externalProcessingPolicy?: ExternalVoiceProcessingPolicy;
+  /** Provider proposals are inert until the Author explicitly applies one. */
+  aiPreviews?: AIStoryPreview[];
   updatedAt: string;
 }
 
@@ -218,7 +243,41 @@ export interface Revision {
   id: string;
   text: string;
   createdAt: string;
-  reason: 'assembled' | 'manual-edit' | 'imported' | 'ai-suggestion-applied';
+  reason: 'assembled' | 'manual-edit' | 'imported' | 'ai-suggestion-applied' | 'ai-rephrase' | 'ai-patch' | 'undo';
+  operationId?: string;
+  basedOnRevisionId?: string;
+  undoesRevisionId?: string;
+}
+
+export interface AIProvenanceSegment {
+  segment: string;
+  sourceIds: string[];
+}
+
+export interface AITargetedPatch {
+  expectedOldText: string;
+  replacementText: string;
+  reason: string;
+  sourceIds: string[];
+}
+
+/** Full proposed prose lives in a user-facing preview, not in the technical operation record. */
+export interface AIStoryPreview {
+  id: string;
+  operationId: string;
+  type: 'assembly' | 'rephrase' | 'patch';
+  provider: string;
+  model: string;
+  createdAt: string;
+  status: 'pending' | 'applied' | 'kept-original';
+  baseRevisionId?: string;
+  sourceIds: string[];
+  title?: string;
+  storyText?: string;
+  provenance?: AIProvenanceSegment[];
+  uncertainties?: string[];
+  patch?: AITargetedPatch;
+  createdRevisionId?: string;
 }
 
 export interface Story {
@@ -229,6 +288,7 @@ export interface Story {
   sources: StorySource[];
   transcript?: Transcript;
   interviewAnswers: InterviewAnswer[];
+  interviewQuestions?: InterviewQuestion[];
   revisions: Revision[];
   privacy: PrivacyLevel;
   createdAt: string;
@@ -248,6 +308,7 @@ export interface Story {
   audioKey?: string;
   /** Explicit opt-in attached only to newly created nonpersonal trial stories. */
   externalProcessingPolicy?: ExternalVoiceProcessingPolicy;
+  aiPreviews?: AIStoryPreview[];
 }
 
 export interface Author {

@@ -247,6 +247,20 @@ button:disabled { cursor: not-allowed; opacity: .42; transform: none !important;
 .answer-materials textarea { width: 100%; min-height: 120px; padding: 14px; border: 1px solid var(--line); border-radius: 12px; }
 .answer-materials small { display: block; margin-top: 10px; color: #718179; }
 .book-addition-editor, .narration-player { max-width: 840px; margin: 28px auto; padding: 24px; border: 1px solid var(--line); border-radius: 20px; background: rgba(255,255,255,.5); }
+.ai-proposal, .ai-tools { max-width: 940px; margin: 28px auto; padding: 26px; border: 1px solid rgba(42,91,72,.24); border-radius: 24px; background: linear-gradient(145deg, rgba(247,244,232,.96), rgba(231,240,230,.9)); box-shadow: 0 18px 45px rgba(29,53,45,.08); }
+.ai-proposal-heading { display: flex; justify-content: space-between; gap: 24px; align-items: flex-start; }
+.ai-proposal-heading h2, .ai-tools h2 { margin: 4px 0 0; font: 600 31px/1.12 var(--font-serif), Georgia, serif; }
+.ai-proposal-heading > span { color: #687a72; font-size: 12px; overflow-wrap: anywhere; }
+.ai-comparison { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 16px; margin: 22px 0; }
+.ai-comparison article { min-width: 0; padding: 20px; border: 1px solid var(--line); border-radius: 16px; background: rgba(255,255,255,.72); }
+.ai-comparison h3 { margin: 0 0 10px; color: var(--pine); font-size: 13px; text-transform: uppercase; letter-spacing: .08em; }
+.ai-comparison p { margin: 0; white-space: pre-wrap; line-height: 1.62; overflow-wrap: anywhere; }
+.ai-safety-note, .ai-patch-reason, .ai-uncertainties, .ai-status { max-width: 940px; margin-inline: auto; }
+.ai-uncertainties ul { margin-bottom: 0; }
+.ai-tool-buttons { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 18px; align-items: center; }
+.ai-patch-form { display: grid; gap: 14px; margin-top: 20px; }
+.ai-patch-form label { display: grid; gap: 7px; font-weight: 700; }
+.ai-patch-form textarea { width: 100%; min-height: 100px; resize: vertical; padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: rgba(255,255,255,.8); font: inherit; }
 .book-addition-editor > h2 { margin-top: 0; font: 600 32px/1.1 var(--font-serif), Georgia, serif; }
 .book-addition-editor .story-textarea { min-height: 180px; margin-bottom: 18px; }
 .narration-player audio { width: 100%; }
@@ -299,6 +313,7 @@ button:disabled { cursor: not-allowed; opacity: .42; transform: none !important;
   .method-grid, .option-grid { grid-template-columns: 1fr; }
   .method-grid > button { min-height: 210px; }
   .review-heading { grid-template-columns: 1fr; }
+  .ai-comparison { grid-template-columns: 1fr; }
   .source-badge { max-width: 100%; }
   .book-shelf { grid-template-columns: 1fr; }
   .story-card { min-height: 270px; }
@@ -348,6 +363,9 @@ button:disabled { cursor: not-allowed; opacity: .42; transform: none !important;
   .title-editor { align-items: stretch; }
   .title-editor .button-primary, .title-editor .button-secondary { width: 100%; }
   .book-addition-editor, .narration-player { padding: 18px; }
+  .ai-proposal, .ai-tools { padding: 20px 16px; border-radius: 18px; }
+  .ai-proposal-heading { display: grid; gap: 8px; }
+  .ai-tool-buttons { display: grid; }
   .option-grid > button { min-height: 200px; }
   .style-list button { padding: 18px; }
   .privacy-card label { grid-template-columns: auto 1fr; }
