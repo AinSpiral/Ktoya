@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { authenticatedUserId } from '@/lib/server-auth';
 
 export async function PUT(request: NextRequest) {
+  if (env.FRIENDS_BETA_MODE === 'true') return new NextResponse(null, { status: 404 });
   const storyId = request.nextUrl.searchParams.get('story');
   const fragmentId = request.nextUrl.searchParams.get('fragment');
   const kind = request.nextUrl.searchParams.get('kind');
@@ -27,6 +28,9 @@ export async function PUT(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest) {
+  if (env.FRIENDS_BETA_MODE === 'true') {
+    return NextResponse.redirect(new URL(`/api/friends/media${request.nextUrl.search}`, request.url), 307);
+  }
   const key = request.nextUrl.searchParams.get('key');
   const userId = authenticatedUserId(request.headers, request.nextUrl.hostname === 'localhost' || request.nextUrl.hostname === '127.0.0.1');
   if (!userId) return NextResponse.json({ error: 'authentication_required' }, { status: 401 });

@@ -5,6 +5,7 @@ import { isAliceTrialRuntimeAllowed } from '@/lib/ai-trial-policy';
 import { authenticatedUserId } from '@/lib/server-auth';
 
 export async function GET(request: NextRequest) {
+  if (env.FRIENDS_BETA_MODE === 'true') return new NextResponse(null, { status: 404 });
   const hostname = request.nextUrl.hostname;
   const userId = authenticatedUserId(request.headers, hostname === 'localhost' || hostname === '127.0.0.1');
   const connected = isAliceTrialRuntimeAllowed(readAliceTrialConfig(env), userId, hostname);

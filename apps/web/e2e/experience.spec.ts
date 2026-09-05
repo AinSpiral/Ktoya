@@ -14,7 +14,7 @@ async function snapshot(page: Page, info: TestInfo, name: string) {
   expect(overlaps).toEqual([]);
   await page.screenshot({ path: info.outputPath(`${name}.png`), fullPage: true, animations: 'disabled' });
 }
-async function state(page: Page): Promise<AppState> { return (await page.request.get('/api/state')).json(); }
+async function state(page: Page): Promise<AppState> { return (await page.request.get('/api/friends/state')).json(); }
 async function capture(page: Page) {
   await page.getByRole('button', { name: 'Начать свою книгу', exact: true }).first().click();
   await page.getByRole('button', { name: 'Да, хочу рассказать', exact: true }).click();
@@ -41,7 +41,7 @@ for (const width of [360,390,768,1024,1600]) test(`life book responsive ${width}
   await context.addInitScript(() => { Object.defineProperty(window,'SpeechRecognition',{value:undefined}); Object.defineProperty(window,'webkitSpeechRecognition',{value:undefined}); });
   const page = await context.newPage();
   page.on('pageerror', error => errors.push(error.message));
-  page.on('console', message => { if (['warning','error'].includes(message.type()) && !(message.text().includes('404 (Not Found)') && message.location().url.includes('/api/state'))) errors.push(message.text()); });
+  page.on('console', message => { if (['warning','error'].includes(message.type()) && !(message.text().includes('404 (Not Found)') && message.location().url.includes('/api/friends/state'))) errors.push(message.text()); });
   page.on('dialog', dialog => dialog.accept());
   try {
     await page.goto('/');
@@ -85,7 +85,7 @@ for (const width of [360,390,768,1024,1600]) test(`life book responsive ${width}
     await snapshot(page,info,'08-editing');
     await page.getByRole('button',{name:'Отменить',exact:true}).click();
     await page.getByLabel('Стиль предложения').selectOption('warm');
-    const rephraseRequest = page.waitForRequest(request => request.url().endsWith('/api/ai/operation') && request.postDataJSON()?.action === 'rephrase');
+    const rephraseRequest = page.waitForRequest(request => request.url().endsWith('/api/friends/ai/operation') && request.postDataJSON()?.action === 'rephrase');
     await page.getByRole('button',{name:'Перефразировать грамотнее',exact:true}).click();
     expect((await rephraseRequest).postDataJSON().narrativeStyle).toBe('warm');
     await page.getByRole('button',{name:'Оставить как было',exact:true}).click();

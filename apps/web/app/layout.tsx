@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Cormorant_Garamond, Manrope } from 'next/font/google';
 import './globals.css';
+import './friends-beta.css';
 
 const serif = Cormorant_Garamond({
   variable: '--font-serif',

@@ -15,7 +15,7 @@ describe('HttpStorageAdapter', () => {
     vi.stubGlobal('fetch', fetchMock);
     const state = createEmptyState();
     await new HttpStorageAdapter().save(state);
-    expect(fetchMock).toHaveBeenCalledWith('/api/state', expect.objectContaining({ method: 'PUT', body: JSON.stringify(state) }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/friends/state', expect.objectContaining({ method: 'PUT', body: JSON.stringify(state) }));
   });
 });
 
@@ -29,9 +29,9 @@ describe('HttpVoiceProcessingAdapter', () => {
     await expect(adapter.transcribe('story-1', 'audio-1')).resolves.toEqual(state);
     await expect(adapter.transcribeCaptureDraft('draft-1', 'audio-2')).resolves.toEqual(state);
     await expect(adapter.narrate('story-1')).resolves.toEqual(state);
-    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/voice/transcription', expect.objectContaining({ method: 'POST', body: JSON.stringify({ storyId: 'story-1', audioFragmentId: 'audio-1' }) }));
-    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/voice/transcription', expect.objectContaining({ method: 'POST', body: JSON.stringify({ captureDraftId: 'draft-1', audioFragmentId: 'audio-2' }) }));
-    expect(fetchMock).toHaveBeenNthCalledWith(3, '/api/voice/narration', expect.objectContaining({ method: 'POST', body: JSON.stringify({ storyId: 'story-1' }) }));
+    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/friends/voice/transcription', expect.objectContaining({ method: 'POST', body: JSON.stringify({ storyId: 'story-1', audioFragmentId: 'audio-1' }) }));
+    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/friends/voice/transcription', expect.objectContaining({ method: 'POST', body: JSON.stringify({ captureDraftId: 'draft-1', audioFragmentId: 'audio-2' }) }));
+    expect(fetchMock).toHaveBeenNthCalledWith(3, '/api/friends/voice/narration', expect.objectContaining({ method: 'POST', body: JSON.stringify({ storyId: 'story-1' }) }));
   });
 
   it('surfaces a safe provider blocker instead of pretending the operation worked', async () => {

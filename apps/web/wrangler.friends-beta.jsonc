@@ -1,0 +1,31 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "ktoya-friends-beta",
+  "account_id": "a2b914633286a8c858fca22758a182c4",
+  "main": "vinext/server/fetch-handler",
+  "compatibility_date": "2026-05-15",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": "dist/client",
+    "not_found_handling": "none",
+    "binding": "ASSETS"
+  },
+  "d1_databases": [
+    {
+      "binding": "FRIENDS_DB",
+      "database_name": "ktoya-friends-beta-db",
+      "database_id": "057231e4-8fde-445b-8fc1-84ce624f5c43"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "FRIENDS_AUDIO",
+      "bucket_name": "ktoya-friends-beta-audio"
+    }
+  ],
+  "vars": {
+    "FRIENDS_BETA_MODE": "true",
+    "FRIENDS_BUILD_ID": "friends-beta-local"
+  },
+  "observability": { "enabled": false }
+}

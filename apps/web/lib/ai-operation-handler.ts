@@ -74,26 +74,31 @@ async function reserveConnected(input: { config: AliceTrialConfig; provider: Ali
   if (!reservation.claimed) throw new Error(reservation.operation ? 'AI_OPERATION_ALREADY_RESERVED' : 'AI_BUDGET_EXHAUSTED');
 }
 
-export async function handleAIOperation(request: NextRequest, runtimeEnv: Cloudflare.Env) {
-  const userId = authenticatedUserId(request.headers, request.nextUrl.hostname === 'localhost' || request.nextUrl.hostname === '127.0.0.1');
+export async function handleAIOperation(
+  request: NextRequest,
+  runtimeEnv: Cloudflare.Env,
+  options?: { userId?: string; db?: D1Database; forceDeterministic?: boolean },
+) {
+  const userId = options?.userId ?? authenticatedUserId(request.headers, request.nextUrl.hostname === 'localhost' || request.nextUrl.hostname === '127.0.0.1');
   if (!userId) return NextResponse.json({ error: 'authentication_required' }, { status: 401 });
+  const db = options?.db ?? runtimeEnv.DB;
   const body = await request.json() as GenerateBody | MutationBody;
   if (!validId(body.operationId)) return NextResponse.json({ error: 'invalid_operation_id' }, { status: 400 });
   let reservedConnectedOperationId: string | null = null;
   let reservedConfig: AliceTrialConfig | null = null;
   let providerUsage: { inputTokens: number; outputTokens: number } | null = null;
   try {
-    let state = await loadAuthorState(runtimeEnv.DB, userId);
+    let state = await loadAuthorState(db, userId);
     if (!state) return NextResponse.json({ error: 'book_not_found' }, { status: 404 });
 
     if (body.action === 'apply-preview' || body.action === 'keep-original' || body.action === 'undo') {
-      return handleMutation(runtimeEnv.DB, userId, state, body);
+      return handleMutation(db, userId, state, body);
     }
     const generate = body as GenerateBody;
 
     const existingResult = findExistingResult(state, generate);
     if (existingResult) {
-      const operation = await findAiOperation(runtimeEnv.DB, generate.operationId, userId);
+      const operation = await findAiOperation(db, generate.operationId, userId);
       return NextResponse.json({
         ...existingResult,
         provider: operation?.provider,
@@ -115,13 +120,13 @@ export async function handleAIOperation(request: NextRequest, runtimeEnv: Cloudf
     if (!context.sources.length) return NextResponse.json({ error: 'confirmed_sources_required' }, { status: 409 });
     if (body.action === 'interview-next' && (draft!.interviewQuestions?.length ?? 0) >= 8) return NextResponse.json({ state, decision: { decision: 'READY', reason: 'Достигнут аварийный предел восьми вопросов.' } });
 
-    const config = readAliceTrialConfig(runtimeEnv);
-    const connected = canUseAliceTrial(config, owner.externalProcessingPolicy, userId, request.nextUrl.hostname);
+    const config = options?.forceDeterministic ? null : readAliceTrialConfig(runtimeEnv);
+    const connected = !options?.forceDeterministic && canUseAliceTrial(config, owner.externalProcessingPolicy, userId, request.nextUrl.hostname);
     const provider: AIProvider = connected
-      ? new AliceAIProvider(config!, { db: runtimeEnv.DB, userId, operationId: body.operationId })
+      ? new AliceAIProvider(config!, { db, userId, operationId: body.operationId })
       : new DeterministicAIProvider();
     if (connected) {
-      const previousOperation = await findAiOperation(runtimeEnv.DB, body.operationId, userId);
+      const previousOperation = await findAiOperation(db, body.operationId, userId);
       if (previousOperation) {
         return NextResponse.json({
           error: previousOperation.status === 'failed' ? 'ai_operation_failed_known' : 'ai_operation_uncertain',
@@ -135,7 +140,7 @@ export async function handleAIOperation(request: NextRequest, runtimeEnv: Cloudf
             : 'Исход предыдущего платного вызова нельзя подтвердить. Автоматический повтор заблокирован.',
         }, { status: 409 });
       }
-      await reserveConnected({ config: config!, provider: provider as AliceAIProvider, db: runtimeEnv.DB, userId, body: generate, contextJson: JSON.stringify(context), sourceIds: context.sources.map((source) => source.id), baseRevisionId: context.currentRevisionId });
+      await reserveConnected({ config: config!, provider: provider as AliceAIProvider, db, userId, body: generate, contextJson: JSON.stringify(context), sourceIds: context.sources.map((source) => source.id), baseRevisionId: context.currentRevisionId });
       reservedConnectedOperationId = body.operationId;
       reservedConfig = config;
     }
@@ -161,23 +166,23 @@ export async function handleAIOperation(request: NextRequest, runtimeEnv: Cloudf
         const now = new Date().toISOString();
         nextDraft = { ...nextDraft, aiReadyDecisions: [...(nextDraft.aiReadyDecisions ?? []), { operationId: body.operationId, reason: applied.decision.reason, provider: provider.id, model: result.model, createdAt: now }], updatedAt: now };
       }
-      state = await saveDraft(runtimeEnv.DB, userId, state, nextDraft);
+      state = await saveDraft(db, userId, state, nextDraft);
       decision = applied.decision as unknown as Record<string, unknown>;
     } else if (body.action === 'assembly') {
       preview = makeAssemblyPreview(draft!, body.operationId, provider.id, result as Awaited<ReturnType<AIProvider['assemble']>>);
-      state = await saveDraft(runtimeEnv.DB, userId, state, { ...draft!, aiPreviews: [...(draft!.aiPreviews ?? []), preview], updatedAt: preview.createdAt });
+      state = await saveDraft(db, userId, state, { ...draft!, aiPreviews: [...(draft!.aiPreviews ?? []), preview], updatedAt: preview.createdAt });
     } else if (body.action === 'rephrase') {
       preview = makeRephrasePreview(storyTarget!, body.operationId, provider.id, result as Awaited<ReturnType<AIProvider['rephrase']>>);
-      if (story) state = await saveStory(runtimeEnv.DB, userId, state, { ...story, aiPreviews: [...(story.aiPreviews ?? []), preview], updatedAt: preview.createdAt });
-      else state = await saveDraft(runtimeEnv.DB, userId, state, { ...draft!, aiPreviews: [...(draft!.aiPreviews ?? []), preview], assembledDraft: { ...storyTarget!, aiPreviews: [...(storyTarget!.aiPreviews ?? []), preview] }, updatedAt: preview.createdAt });
+      if (story) state = await saveStory(db, userId, state, { ...story, aiPreviews: [...(story.aiPreviews ?? []), preview], updatedAt: preview.createdAt });
+      else state = await saveDraft(db, userId, state, { ...draft!, aiPreviews: [...(draft!.aiPreviews ?? []), preview], assembledDraft: { ...storyTarget!, aiPreviews: [...(storyTarget!.aiPreviews ?? []), preview] }, updatedAt: preview.createdAt });
     } else {
       preview = makePatchPreview(storyTarget!, body.operationId, provider.id, result as Awaited<ReturnType<AIProvider['patch']>>);
-      if (story) state = await saveStory(runtimeEnv.DB, userId, state, { ...story, aiPreviews: [...(story.aiPreviews ?? []), preview], updatedAt: preview.createdAt });
-      else state = await saveDraft(runtimeEnv.DB, userId, state, { ...draft!, aiPreviews: [...(draft!.aiPreviews ?? []), preview], assembledDraft: { ...storyTarget!, aiPreviews: [...(storyTarget!.aiPreviews ?? []), preview] }, updatedAt: preview.createdAt });
+      if (story) state = await saveStory(db, userId, state, { ...story, aiPreviews: [...(story.aiPreviews ?? []), preview], updatedAt: preview.createdAt });
+      else state = await saveDraft(db, userId, state, { ...draft!, aiPreviews: [...(draft!.aiPreviews ?? []), preview], assembledDraft: { ...storyTarget!, aiPreviews: [...(storyTarget!.aiPreviews ?? []), preview] }, updatedAt: preview.createdAt });
     }
     const actualCost = connected ? actualAiCostRub(result.usage.inputTokens, result.usage.outputTokens, config!) : 0;
     if (connected) {
-      await completeAiOperation({ db: runtimeEnv.DB, operationId: body.operationId, inputTokens: result.usage.inputTokens, outputTokens: result.usage.outputTokens, actualCostRub: actualCost, previewId: preview?.id ?? `question:${body.operationId}` });
+      await completeAiOperation({ db, operationId: body.operationId, inputTokens: result.usage.inputTokens, outputTokens: result.usage.outputTokens, actualCostRub: actualCost, previewId: preview?.id ?? `question:${body.operationId}` });
       reservedConnectedOperationId = null;
     }
     return NextResponse.json({ state, provider: provider.id, mode: provider.mode, model: result.model, usage: result.usage, actualCostRub: actualCost, ...(decision ? { decision } : { preview }) });
@@ -185,8 +190,8 @@ export async function handleAIOperation(request: NextRequest, runtimeEnv: Cloudf
     if (reservedConnectedOperationId) {
       try {
         const failureCode = safeFailureCode(error);
-        if (providerUsage && reservedConfig) await failAiOperation({ db: runtimeEnv.DB, operationId: reservedConnectedOperationId, errorCode: failureCode, ...providerUsage, actualCostRub: actualAiCostRub(providerUsage.inputTokens, providerUsage.outputTokens, reservedConfig) });
-        else await markAiOperationUncertain(runtimeEnv.DB, reservedConnectedOperationId, failureCode);
+        if (providerUsage && reservedConfig) await failAiOperation({ db, operationId: reservedConnectedOperationId, errorCode: failureCode, ...providerUsage, actualCostRub: actualAiCostRub(providerUsage.inputTokens, providerUsage.outputTokens, reservedConfig) });
+        else await markAiOperationUncertain(db, reservedConnectedOperationId, failureCode);
       } catch { /* Preserve the original failure; the reservation still blocks reuse. */ }
     }
     if (error instanceof StateConflictError) return NextResponse.json({ error: 'conflict', message: 'История изменилась в другой вкладке. Новый AI-вызов не выполнен.' }, { status: 409 });

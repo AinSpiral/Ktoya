@@ -36,8 +36,8 @@ async function session(fixture: 'story' | 'answer' | 'long' = 'story') {
   });
   await page.goto('/');
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
-  await expect.poll(async () => (await context.request.get('/api/ai/capabilities')).json()).toMatchObject({ mode: 'deterministic' });
-  const voice = await (await context.request.get('/api/voice/capabilities')).json();
+  await expect.poll(async () => (await context.request.get('/api/friends/ai/capabilities')).json()).toMatchObject({ mode: 'deterministic' });
+  const voice = await (await context.request.get('/api/friends/voice/capabilities')).json();
   expect(voice.transcription.available).toBe(false);
   expect(voice.narration.available).toBe(false);
   return { browser, context, page, external, errors };
@@ -63,8 +63,8 @@ async function record(page: Page, seconds = 9) {
 }
 
 async function persisted(page: Page): Promise<AppState> {
-  await expect.poll(async () => (await page.request.get('/api/state')).status()).toBe(200);
-  const response = await page.request.get('/api/state');
+  await expect.poll(async () => (await page.request.get('/api/friends/state')).status()).toBe(200);
+  const response = await page.request.get('/api/friends/state');
   expect(response.ok()).toBe(true);
   return response.json();
 }
@@ -79,7 +79,7 @@ test('native fake microphone: voice-only capture, saved Blob, playback, reload',
     const fragment = before.storyFragments[0].fragment;
     expect(fragment.uploadStatus).toBe('saved');
     expect(fragment.objectKey).toBeTruthy();
-    const media = await s.page.request.get(`/api/media?key=${encodeURIComponent(fragment.objectKey!)}`);
+    const media = await s.page.request.get(`/api/friends/media?key=${encodeURIComponent(fragment.objectKey!)}`);
     expect(media.ok()).toBe(true);
     expect((await media.body()).length).toBeGreaterThan(1000);
     await s.page.reload();
@@ -112,12 +112,12 @@ test('reload while upload acknowledgement is pending recovers the same server or
   let uploaded = false;
   let pendingId = '';
   s.page.on('request', request => {
-    if (request.method() === 'PUT' && new URL(request.url()).pathname === '/api/state') {
+    if (request.method() === 'PUT' && new URL(request.url()).pathname === '/api/friends/state') {
       const input = request.postDataJSON() as AppState;
       pendingId = input.captureDrafts?.[0]?.storyFragments[0]?.fragment.id ?? pendingId;
     }
   });
-  await s.page.route('**/api/media?**', async route => {
+  await s.page.route('**/api/friends/media?**', async route => {
     if (route.request().method() !== 'PUT') return route.continue();
     const response = await route.fetch();
     uploaded = response.ok();

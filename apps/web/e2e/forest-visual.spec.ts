@@ -59,7 +59,7 @@ async function newIsolatedContext(
       return;
     }
 
-    if (url.pathname === '/api/ai/capabilities') {
+    if (url.pathname === '/api/friends/ai/capabilities') {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -74,7 +74,7 @@ async function newIsolatedContext(
       return;
     }
 
-    if (url.pathname === '/api/voice/capabilities') {
+    if (url.pathname === '/api/friends/voice/capabilities') {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -87,9 +87,9 @@ async function newIsolatedContext(
       return;
     }
 
-    const isForbiddenProviderRequest = url.pathname === '/api/ai/operation'
-      || url.pathname === '/api/media'
-      || url.pathname.startsWith('/api/voice/');
+    const isForbiddenProviderRequest = url.pathname === '/api/friends/ai/operation'
+      || url.pathname === '/api/friends/media'
+      || url.pathname.startsWith('/api/friends/voice/');
     if (isForbiddenProviderRequest) {
       audit.forbiddenProviders.push(`${request.method()} ${url.pathname}`);
       await route.abort('blockedbyclient');
@@ -116,7 +116,7 @@ async function newIsolatedContext(
   // Persist only an empty synthetic account in the isolated local D1 fixture.
   // GET /api/state intentionally returns 404 for an account with no stored row;
   // seeding makes the runtime-error audit strict without filtering console errors.
-  const seed = await context.request.put('/api/state', { data: createEmptyState() });
+  const seed = await context.request.put('/api/friends/state', { data: createEmptyState() });
   expect(seed.ok(), 'local empty-account fixture must be saved').toBe(true);
   return { context, audit };
 }

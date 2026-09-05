@@ -6,6 +6,7 @@ import { loadAuthorState, saveAuthorState, StateConflictError } from '@/lib/serv
 import { authenticatedUserId } from '@/lib/server-auth';
 
 export async function GET(request: NextRequest) {
+  if (env.FRIENDS_BETA_MODE === 'true') return new NextResponse(null, { status: 404 });
   const currentUser = authenticatedUserId(request.headers, request.nextUrl.hostname === 'localhost' || request.nextUrl.hostname === '127.0.0.1');
   if (!currentUser) return NextResponse.json({ error: 'authentication_required' }, { status: 401 });
   const state = await loadAuthorState(env.DB, currentUser);
@@ -15,6 +16,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
+  if (env.FRIENDS_BETA_MODE === 'true') return new NextResponse(null, { status: 404 });
   const currentUser = authenticatedUserId(request.headers, request.nextUrl.hostname === 'localhost' || request.nextUrl.hostname === '127.0.0.1');
   if (!currentUser) return NextResponse.json({ error: 'authentication_required' }, { status: 401 });
   const body = await request.json() as AppState;

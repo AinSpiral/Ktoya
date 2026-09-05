@@ -3,6 +3,13 @@ declare global {
     interface Env {
       DB: D1Database;
       STORY_MEDIA: R2Bucket;
+      FRIENDS_DB: D1Database;
+      FRIENDS_AUDIO: R2Bucket;
+      FRIENDS_BETA_MODE?: string;
+      FRIENDS_ACCESS_CODE?: string;
+      OWNER_ACCESS_CODE?: string;
+      FRIENDS_SESSION_SECRET?: string;
+      FRIENDS_BUILD_ID?: string;
       YANDEX_SPEECHKIT_API_KEY?: string;
       KTOYA_SPEECHKIT_TRIAL_ENABLED?: string;
       KTOYA_SPEECHKIT_KEY_EXPIRES_AT?: string;
@@ -34,6 +41,13 @@ declare global {
   interface Env {
     DB: D1Database;
     STORY_MEDIA: R2Bucket;
+    FRIENDS_DB: D1Database;
+    FRIENDS_AUDIO: R2Bucket;
+    FRIENDS_BETA_MODE?: string;
+    FRIENDS_ACCESS_CODE?: string;
+    OWNER_ACCESS_CODE?: string;
+    FRIENDS_SESSION_SECRET?: string;
+    FRIENDS_BUILD_ID?: string;
     YANDEX_SPEECHKIT_API_KEY?: string;
     KTOYA_SPEECHKIT_TRIAL_ENABLED?: string;
     KTOYA_SPEECHKIT_KEY_EXPIRES_AT?: string;

@@ -15,6 +15,7 @@ import './forest-hero.css';
 import './hybrid-hero.css';
 import { STORY_STYLES, type NarrativeStyle } from '@/lib/story-styles';
 import { BookCompositionPanel, PrintableBook } from './book-composition-panel';
+import { FriendsAccessGate } from './friends-access-gate';
 
 type View = 'landing' | 'first-choice' | 'capture' | 'interview' | 'draft' | 'register' | 'workspace';
 type WorkspacePanel = 'book' | 'read' | 'settings' | 'privacy' | 'export' | 'balance' | 'feedback' | 'roadmap';
@@ -149,7 +150,7 @@ function AITools({ busy, patch, canUndo, initialStyle = 'natural', onRephrase, o
   </section>;
 }
 
-export default function Home() {
+function LifeBookApp() {
   const [view, setViewState] = useState<View>(viewFromLocation);
   const [appState, setAppState] = useState<AppState>(() => createEmptyState());
   const [loaded, setLoaded] = useState(false);
@@ -1415,6 +1416,10 @@ export default function Home() {
   }
 
   return null;
+}
+
+export default function Home() {
+  return <FriendsAccessGate><LifeBookApp /></FriendsAccessGate>;
 }
 
 function SettingsPanel({ style, onSave }: { style: StoryStyle; onSave: (style: StoryStyle) => void }) {

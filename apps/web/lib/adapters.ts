@@ -3,6 +3,17 @@ import type { VoiceProviderCapabilities } from './voice-provider-registry';
 import type { NarrativeStyle } from './story-styles';
 import { bookMarkdown } from './book-export';
 
+function clientHeaders(contentType?: string) {
+  const headers: Record<string, string> = contentType ? { 'content-type': contentType } : {};
+  if (typeof window === 'undefined') return headers;
+  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+    headers['x-ktoya-dev-user'] = 'local-development-author';
+  }
+  const csrf = document.cookie.split(';').map((value) => value.trim()).find((value) => value.startsWith('ktoya_fb_csrf='))?.split('=').slice(1).join('=');
+  if (csrf) headers['x-ktoya-csrf'] = decodeURIComponent(csrf);
+  return headers;
+}
+
 export interface AIStorySourceInput {
   id: string;
   kind: 'typed' | 'transcript' | 'interview-answer' | 'manual-edit';
@@ -145,18 +156,16 @@ export interface ExportAdapter {
 
 export class HttpStorageAdapter implements StorageAdapter {
   private headers(contentType?: string) {
-    const headers: Record<string, string> = contentType ? { 'content-type': contentType } : {};
-    if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) headers['x-ktoya-dev-user'] = 'local-development-author';
-    return headers;
+    return clientHeaders(contentType);
   }
   async load() {
-    const response = await fetch('/api/state', { cache: 'no-store', headers: this.headers() });
+    const response = await fetch('/api/friends/state', { cache: 'no-store', headers: this.headers() });
     if (response.status === 404) return null;
     if (!response.ok) throw new Error('Не удалось загрузить книгу');
     return response.json() as Promise<AppState>;
   }
   async save(state: AppState) {
-    const response = await fetch('/api/state', { method: 'PUT', headers: this.headers('application/json'), body: JSON.stringify(state) });
+    const response = await fetch('/api/friends/state', { method: 'PUT', headers: this.headers('application/json'), body: JSON.stringify(state) });
     if (response.status === 409) throw new StorageConflictError('Книга изменилась в другой вкладке');
     if (!response.ok) throw new Error('Не удалось сохранить книгу');
     return response.json() as Promise<AppState>;
@@ -166,45 +175,43 @@ export class HttpStorageAdapter implements StorageAdapter {
     if (!response.ok) throw new Error('Не удалось сохранить обратную связь');
   }
   async saveAudio(storyId: string, fragmentId: string, blob: Blob) {
-    const response = await fetch(`/api/media?story=${encodeURIComponent(storyId)}&fragment=${encodeURIComponent(fragmentId)}`, { method: 'PUT', headers: this.headers(blob.type || 'audio/webm'), body: blob });
+    const response = await fetch(`/api/friends/media?story=${encodeURIComponent(storyId)}&fragment=${encodeURIComponent(fragmentId)}`, { method: 'PUT', headers: this.headers(blob.type || 'audio/webm'), body: blob });
     if (!response.ok) throw new Error('Не удалось сохранить запись');
     const result = await response.json() as { key: string };
     return result.key;
   }
   async saveDerivedAudio(storyId: string, fragmentId: string, assetId: string, blob: Blob) {
-    const response = await fetch(`/api/media?story=${encodeURIComponent(storyId)}&fragment=${encodeURIComponent(fragmentId)}&asset=${encodeURIComponent(assetId)}&kind=derived`, { method: 'PUT', headers: this.headers(blob.type || 'audio/wav'), body: blob });
+    const response = await fetch(`/api/friends/media?story=${encodeURIComponent(storyId)}&fragment=${encodeURIComponent(fragmentId)}&asset=${encodeURIComponent(assetId)}&kind=derived`, { method: 'PUT', headers: this.headers(blob.type || 'audio/wav'), body: blob });
     if (!response.ok) throw new Error('Не удалось сохранить техническую копию записи');
     const result = await response.json() as { key: string };
     return result.key;
   }
   audioUrl(objectKey: string) {
-    return `/api/media?key=${encodeURIComponent(objectKey)}`;
+    return `/api/friends/media?key=${encodeURIComponent(objectKey)}`;
   }
 }
 
 export class HttpVoiceProcessingAdapter {
   private headers(contentType?: string) {
-    const headers: Record<string, string> = contentType ? { 'content-type': contentType } : {};
-    if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) headers['x-ktoya-dev-user'] = 'local-development-author';
-    return headers;
+    return clientHeaders(contentType);
   }
 
   async capabilities(): Promise<VoiceProviderCapabilities> {
-    const response = await fetch('/api/voice/capabilities', { cache: 'no-store' });
+    const response = await fetch('/api/friends/voice/capabilities', { cache: 'no-store' });
     if (!response.ok) throw new Error('Не удалось проверить готовность голосовых сервисов.');
     return response.json() as Promise<VoiceProviderCapabilities>;
   }
 
   async transcribe(storyId: string, audioFragmentId: string, processingMode: 'faithful' | 'literature-derived' = 'faithful'): Promise<AppState> {
-    return this.post('/api/voice/transcription', { storyId, audioFragmentId, ...(processingMode === 'faithful' ? {} : { processingMode }) });
+    return this.post('/api/friends/voice/transcription', { storyId, audioFragmentId, ...(processingMode === 'faithful' ? {} : { processingMode }) });
   }
 
   async transcribeCaptureDraft(captureDraftId: string, audioFragmentId: string, processingMode: 'faithful' | 'literature-derived' = 'faithful'): Promise<AppState> {
-    return this.post('/api/voice/transcription', { captureDraftId, audioFragmentId, ...(processingMode === 'faithful' ? {} : { processingMode }) });
+    return this.post('/api/friends/voice/transcription', { captureDraftId, audioFragmentId, ...(processingMode === 'faithful' ? {} : { processingMode }) });
   }
 
   async narrate(storyId: string, voiceId?: string): Promise<AppState> {
-    return this.post('/api/voice/narration', { storyId, ...(voiceId ? { voiceId } : {}) });
+    return this.post('/api/friends/voice/narration', { storyId, ...(voiceId ? { voiceId } : {}) });
   }
 
   private async post(path: string, body: Record<string, string>): Promise<AppState> {
@@ -239,13 +246,11 @@ export type AIClientResult = {
 
 export class HttpAIProcessingAdapter {
   private headers(contentType?: string) {
-    const headers: Record<string, string> = contentType ? { 'content-type': contentType } : {};
-    if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) headers['x-ktoya-dev-user'] = 'local-development-author';
-    return headers;
+    return clientHeaders(contentType);
   }
 
   async capabilities(): Promise<AIProviderCapabilities> {
-    const response = await fetch('/api/ai/capabilities', { cache: 'no-store', headers: this.headers() });
+    const response = await fetch('/api/friends/ai/capabilities', { cache: 'no-store', headers: this.headers() });
     if (!response.ok) throw new Error('Не удалось проверить режим AI.');
     return response.json() as Promise<AIProviderCapabilities>;
   }
@@ -259,7 +264,7 @@ export class HttpAIProcessingAdapter {
   undo(owner: { storyId?: string; captureDraftId?: string }, operationId: string) { return this.post({ action: 'undo', ...owner, operationId }); }
 
   private async post(body: Record<string, string | undefined>): Promise<AIClientResult> {
-    const response = await fetch('/api/ai/operation', { method: 'POST', headers: this.headers('application/json'), body: JSON.stringify(body) });
+    const response = await fetch('/api/friends/ai/operation', { method: 'POST', headers: this.headers('application/json'), body: JSON.stringify(body) });
     if (response.status === 409) throw new StorageConflictError((await response.json().catch(() => null) as { message?: string } | null)?.message ?? 'AI-операция уже выполнялась или история изменилась.');
     if (!response.ok) {
       const detail = await response.json().catch(() => null) as { message?: string } | null;
@@ -271,7 +276,7 @@ export class HttpAIProcessingAdapter {
 
 export class HeaderAuthAdapter implements AuthAdapter {
   async currentUser() {
-    const response = await fetch('/api/me', { cache: 'no-store' });
+    const response = await fetch('/api/friends/me', { cache: 'no-store' });
     if (!response.ok) return null;
     return response.json() as Promise<{ id: string; email: string; name: string }>;
   }
