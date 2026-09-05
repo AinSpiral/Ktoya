@@ -2,6 +2,18 @@
 
 Status: local visual candidate, not published, not approved for release.
 
+## Mandatory living-pages addendum — 06 September 2026
+
+The user's critical clarification supersedes accepting a rectangular paper-colored panel on a forest backdrop. Every primary capture, interview, preview/revision, book-planning and reading surface must read as a material leaf. `living-pages.css` adds three related treatments: expressive main story leaf, calmer question/notes, and clean reading leaf. Uneven contours, fibre/grain, color variation, edge thickness and a shallow binding crease are confined to noninteractive pseudo-elements. Text is never transformed or clipped; native inputs, focus rings, recording controls and author state are preserved. Mobile retains the same material silhouette. Forced-color accessibility and print deliberately prefer clarity over decorative texture.
+
+`paper-fibres.svg` is a small deterministic, non-representational UI texture (two tiled noise filters), not a fifth raster master, illustration, external asset or generated scene. The four approved image masters are unchanged. Compare `outputs/living-world-v2/before-living-pages/` (immutable intermediate 9d45c2e captures) to fresh `after/`; do not confuse the former with the original 23908bf baseline in `before/`.
+
+Prior QA below describes the intermediate implementation. Fresh living-pages QA: five-width complete author journey 5/5, shell/fallback 6/6, material/focus/forced-color/print/texture-failure checks 4/4. Lint, typecheck and build passed after the final surface CSS. The 913-byte SVG is requested once; actual resource ledger and screenshots are retained. Browser viewports are Chrome emulation, not physical-device or Safari certification. Final broader regression and the exact final-commit scan are recorded in the local acceptance artifact.
+
+Intermediate scan 365dfe42-87a4-4b07-a149-4fb9b98d4dfa completed with 0 reportable findings, all 30 changed files covered. It targets 9d45c2e only and cannot certify later changes. Its canonical documents/report/SARIF are copied to outputs/living-world-v2/security-intermediate-9d45c2e; two optional context Markdown sidecars could not be copied because filesystem access was denied, while the complete threat-model object is preserved in the copied canonical manifest. The temporary original remains on C:.
+
+Addendum self-critique: the main surfaces now have visible material grain, a shallow binding crease, irregular contour and edge thickness, rather than only a warm fill and card shadow. Material treatment is deliberately procedural UI styling, not a photograph of a unique handmade sheet. The same contour family repeats; long comparison/revision forms remain dense. No claim of perfect physical simulation or final visual approval is made.
+
 Branch: `codex/feat/life-book-living-world-v2`.
 Immutable baseline: `23908bf937fdfd149bf36bb153825c2d5fbfa4e0`.
 

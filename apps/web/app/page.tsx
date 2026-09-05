@@ -15,6 +15,7 @@ import './forest-hero.css';
 import './hybrid-hero.css';
 import './living-world.css';
 import './living-interior.css';
+import './living-pages.css';
 import { STORY_STYLES, type NarrativeStyle } from '@/lib/story-styles';
 import { BookCompositionPanel, PrintableBook } from './book-composition-panel';
 import { FriendsAccessGate } from './friends-access-gate';

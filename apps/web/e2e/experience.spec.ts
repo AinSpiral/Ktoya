@@ -6,16 +6,32 @@ import type { AppState } from '../lib/domain';
 
 async function snapshot(page: Page, info: TestInfo, name: string) {
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-  const cardContrast=await page.locator('.story-card:not(.add-card)').evaluateAll(cards=>{
+  const cardContrast=await page.locator('.story-card:not(.add-card),.book-workspace').evaluateAll(cards=>{
     const rgb=(s:string)=>s.match(/[\d.]+/g)!.slice(0,3).map(Number);
     const luminance=(c:number[])=>c.map(v=>v/255).map(v=>v<=.04045?v/12.92:((v+.055)/1.055)**2.4).reduce((s,v,i)=>s+v*[.2126,.7152,.0722][i],0);
-    return cards.flatMap(card=>[card,...card.querySelectorAll('h2,p,small,span')].map(el=>{
-      const bg=luminance(rgb(getComputedStyle(card).backgroundColor));
+    return cards.flatMap(card=>(card.matches('.book-workspace')?[...card.querySelectorAll('.book-intro > p')]:[card,...card.querySelectorAll('h2,p,small,span')]).map(el=>{
+      const material=getComputedStyle(card,'::before');
+      const bg=luminance(rgb(material.content !== 'none' ? material.backgroundColor : getComputedStyle(card).backgroundColor));
       const fg=luminance(rgb(getComputedStyle(el).color));
       return (Math.max(bg,fg)+.05)/(Math.min(bg,fg)+.05);
     }));
   });
   for(const ratio of cardContrast) expect(ratio,'book card text must retain readable contrast after paper restyling').toBeGreaterThanOrEqual(4.5);
+  const leaves=await page.locator('.writing-stage,.question-stage,.review-stage,.paper-page,.reader-page,.book-workspace,.composition-panel,.ai-proposal,.ai-tools,.book-addition-editor').evaluateAll(elements=>elements.filter(e=>(e as HTMLElement).offsetWidth).map(e=>{
+    const face=getComputedStyle(e,'::before'),back=getComputedStyle(e,'::after');
+    return {surface:e.className,face:face.backgroundImage,edge:face.clipPath,unclipped:getComputedStyle(e).clipPath,
+      decorationOnly:face.pointerEvents==='none'&&back.pointerEvents==='none',flatText:getComputedStyle(e).transform,
+      radius:getComputedStyle(e).borderTopLeftRadius,frame:getComputedStyle(e).borderTopWidth};
+  }));
+  for(const leaf of leaves){
+    expect(leaf.face,leaf.surface).toContain('paper-fibres.svg');
+    expect(leaf.edge,leaf.surface).toContain('polygon(');
+    expect(leaf.unclipped,leaf.surface).toBe('none');
+    expect(leaf.decorationOnly,leaf.surface).toBe(true);
+    expect(leaf.flatText,leaf.surface).toBe('none');
+    expect(leaf.radius,leaf.surface).toBe('0px');
+    expect(leaf.frame,leaf.surface).toBe('0px');
+  }
   const overlaps = await page.evaluate(() => {
     const buttons = [...document.querySelectorAll<HTMLButtonElement>('.flow-actions button, .reader-tools button, .ai-tool-buttons button')].filter(el => el.offsetWidth && el.offsetHeight);
     return buttons.flatMap((a, i) => buttons.slice(i + 1).filter(b => a.parentElement === b.parentElement).filter(b => {
@@ -95,6 +111,7 @@ for (const width of [360,390,768,1024,1600]) test(`life book responsive ${width}
     await expect(page.getByRole('region',{name:'Предложение AI'})).toBeVisible();
     await snapshot(page,info,'06-story-preview');
     await page.getByRole('button',{name:'Применить новой версией',exact:true}).click();
+    await snapshot(page,info,'06b-applied-story');
     await page.getByRole('button',{name:'Всё верно — добавить в книгу',exact:true}).click();
     await page.getByLabel('Как к тебе обращаться').fill('Тестовый автор');
     await page.getByLabel('Электронная почта').fill('book@example.test');
@@ -119,6 +136,7 @@ for (const width of [360,390,768,1024,1600]) test(`life book responsive ${width}
       await page.locator('.book-addition-editor').getByLabel('Расшифровка').fill('Не меняй порядок событий.');
     }
     await page.getByLabel('Новый текст для истории').fill('Исправь только пунктуацию в первом предложении.');
+    await snapshot(page,info,'08b-correction-instruction');
     await page.getByRole('button',{name:'Проверил инструкцию — выбрать фрагмент',exact:true}).click();
     await expect(page.getByPlaceholder('Вставь точный фрагмент истории')).toHaveValue('');
     expect((await state(page)).stories[0].text).toBe(first.text);

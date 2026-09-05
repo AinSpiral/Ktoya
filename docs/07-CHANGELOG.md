@@ -9,6 +9,8 @@
 
 ## 05.09.2026 — локальная художественная система Living World v2
 
+- 06.09: обязательное уточнение «живые листы»: заменены flat/rounded primary surfaces на материальные страницы, добавлена 913-byte локальная fibre texture, silhouette edges/thickness и тёплые чернила. Текст и focus не обрезаются; новые QA-проверки материала, forced colors и texture failure. Отдельно сохранён before-living-pages набор для сравнения с 9d45c2e.
+
 - Общий quiet-forest/paper/wood визуальный слой для всех авторских экранов, включая recorder, AI review, reader/composition, настройки и feedback; без изменения данных и логики.
 - Усилены физическая книга и Древо жизни; HTML обложки геометрически согласован с master. Новый time-cut asset связывает дерево, кольца и память.
 - Дополнены screenshot/QA проверки общего мира, image fallback, reload и reduced motion. Local-only; подробности и честные ограничения в [22](22-LIVING-WORLD-SYSTEM-V2.md), решение D061.

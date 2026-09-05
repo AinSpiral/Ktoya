@@ -37,13 +37,14 @@ for (const width of [360,390,768,1024,1600]) test(`living world shell ${width}: 
       const card=document.querySelector('.writing-stage')!;
       const shell=document.querySelector('.flow-shell')!;
       return {width:innerWidth,scrollWidth:document.documentElement.scrollWidth,
-        forest:getComputedStyle(shell).backgroundImage,paper:getComputedStyle(card).backgroundImage,
+        forest:getComputedStyle(shell).backgroundImage,paper:getComputedStyle(card,'::before').backgroundImage,
         runningAnimations:card.getAnimations({subtree:true}).filter(a=>a.playState==='running').length,
         fonts:document.fonts.status,
         images:performance.getEntriesByType('resource').filter(r=>r.name.includes('/art/')).map(r=>({name:new URL(r.name).pathname,bytes:(r as PerformanceResourceTiming).encodedBodySize}))};
     });
     expect(evidence.scrollWidth).toBeLessThanOrEqual(width);
     expect(evidence.forest).toContain('forest-writing');
+    expect(evidence.paper).toContain('paper-fibres.svg');
     expect(evidence.runningAnimations).toBe(0);
     await writeFile(resolve(out,`shell-evidence-${width}.json`),JSON.stringify(evidence,null,2));
     await page.getByRole('button',{name:'Оставить отзыв',exact:true}).click();
@@ -54,8 +55,8 @@ for (const width of [360,390,768,1024,1600]) test(`living world shell ${width}: 
     if (width===390) {
       // Baseline component styling, same unchanged dialog DOM; no background is included.
       const disabled=await page.evaluate(()=>{
-        const sheet=[...document.styleSheets].find(s=>(s.ownerNode as HTMLElement)?.getAttribute('data-vite-dev-id')?.endsWith('/living-interior.css'));
-        if(!sheet)return false; sheet.disabled=true;return true;
+        const sheets=[...document.styleSheets].filter(s=>/living-(interior|pages)\.css$/.test((s.ownerNode as HTMLElement)?.getAttribute('data-vite-dev-id')||''));
+        if(sheets.length!==2)return false; for(const sheet of sheets)sheet.disabled=true;return true;
       });
       expect(disabled).toBe(true);
       await dialog.screenshot({path:resolve('outputs/living-world-v2/before/feedback-component-390.png'),animations:'disabled'});

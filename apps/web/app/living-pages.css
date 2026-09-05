@@ -1,0 +1,95 @@
+/* Living leaves: presentation only. Contours belong to noninteractive pseudo-elements,
+   never the content box, so focus rings, inputs and text remain unclipped/unwarped. */
+@media screen {
+  :root {
+    --leaf-ink:#342e23;
+    --leaf-paper:#f6efde;
+    --leaf-fibres:url('/art/living-world-v2/paper-fibres.svg');
+    --leaf-edge:polygon(0.7% 4px,7% 2px,16% 5px,27% 1px,38% 3px,49% 0,62% 4px,74% 2px,86% 5px,96% 1px,99.4% 5px,99.7% 8%,99.3% 17%,99.8% 29%,99.4% 41%,100% 53%,99.5% 65%,99.8% 77%,99.3% 91%,99.6% calc(100% - 5px),94% calc(100% - 2px),83% calc(100% - 4px),71% 100%,58% calc(100% - 3px),45% calc(100% - 1px),31% calc(100% - 5px),19% calc(100% - 2px),7% calc(100% - 4px),0.5% calc(100% - 1px),0.2% 93%,0.7% 81%,0.1% 70%,0.6% 58%,0% 47%,0.5% 34%,0.2% 23%,0.8% 12%);
+  }
+  .flow-shell :is(.choice-stage,.writing-stage,.question-stage,.review-stage,.register-stage,.paper-page,.ai-proposal),
+  .workspace :is(.book-workspace,.panel-page,.reader-page,.composition-panel,.story-card,.ai-tools,.story-materials,.book-addition-editor,.provenance,.interview-answers,.ai-proposal),
+  :is(.flow-shell,.workspace) .ai-comparison article,
+  .workspace .chapter-plan {
+    position:relative;
+    isolation:isolate;
+    border:0;
+    border-radius:0;
+    background:transparent;
+    box-shadow:none;
+    color:var(--leaf-ink);
+    /* A silhouette shadow, not a rounded-card shadow. No full-page SVG filter. */
+    filter:drop-shadow(0 2px 1px #39271427) drop-shadow(0 12px 16px #0b180d35);
+  }
+  .flow-shell :is(.choice-stage,.writing-stage,.question-stage,.review-stage,.register-stage,.paper-page,.ai-proposal)::before,
+  .workspace :is(.book-workspace,.panel-page,.reader-page,.composition-panel,.story-card,.ai-tools,.story-materials,.book-addition-editor,.provenance,.interview-answers,.ai-proposal)::before,
+  :is(.flow-shell,.workspace) .ai-comparison article::before,
+  .workspace .chapter-plan::before {
+    content:'';position:absolute;inset:0;z-index:-1;pointer-events:none;
+    background-color:var(--leaf-paper);
+    background-image:var(--leaf-fibres),
+      radial-gradient(ellipse at 5% 17%,#bba07519,transparent 48%),
+      radial-gradient(ellipse at 83% 72%,#fffdf171,transparent 55%),
+      linear-gradient(92deg,#aa8d5c3b,transparent 12px,#fffefa7d 24px,transparent 42px,transparent calc(100% - 20px),#b7a17723 calc(100% - 6px),#fff7de8a);
+    background-size:256px 256px,100% 100%,100% 100%,100% 100%;
+    clip-path:var(--leaf-edge);
+    box-shadow:inset 0 1px 2px #fffdf3,inset 0 -3px 5px #9b78452e;
+  }
+  .flow-shell :is(.choice-stage,.writing-stage,.question-stage,.review-stage,.register-stage,.paper-page,.ai-proposal)::after,
+  .workspace :is(.book-workspace,.panel-page,.reader-page,.composition-panel,.story-card,.ai-tools,.story-materials,.book-addition-editor,.provenance,.interview-answers,.ai-proposal)::after,
+  :is(.flow-shell,.workspace) .ai-comparison article::after,
+  .workspace .chapter-plan::after {
+    content:'';position:absolute;inset:3px -1px -3px 2px;z-index:-2;pointer-events:none;
+    background:linear-gradient(93deg,#c6b48f,#e2d5b8 20%,#d5c39e 80%,#bca982);
+    clip-path:var(--leaf-edge);
+    transform:rotate(-.13deg);
+  }
+  /* A / main story leaf: a restrained binding crease and space to hold the leaf. */
+  .flow-shell :is(.writing-stage,.review-stage) { padding-inline:clamp(28px,5vw,74px); }
+  .flow-shell :is(.writing-stage,.review-stage) > .eyebrow,
+  .workspace .book-intro > .eyebrow { padding-bottom:16px;border-bottom:1px solid #8e765244; }
+  .flow-shell :is(.story-textarea,.answer-textarea), .workspace textarea {
+    color:var(--leaf-ink);background:#fffaf088;border-color:#8f7c596b;
+    border-radius:3px 5px 2px 4px;box-shadow:inset 0 1px 4px #8b6f3c12;
+  }
+  .flow-shell .recorder { border:0;border-block:1px solid #9e8c6655;border-radius:0;background:#d8d9bd45; }
+  /* B / question and marginal notes: less relief, not another plastic card. */
+  .flow-shell .question-stage { --leaf-paper:#f4ebd7; }
+  .workspace .reader :is(.ai-tools,.story-materials,.book-addition-editor,.provenance,.interview-answers,.ai-proposal) {
+    background:transparent;border:0;border-radius:0;box-shadow:none;
+  }
+  .workspace .mobile-section-nav { background:#183025e8;border-color:#bfaa7755; }
+  .workspace .mobile-section-nav button { color:#f2e6c9;border-color:#baa47666; }
+  .workspace :is(.ai-tools,.story-materials,.book-addition-editor,.provenance,.interview-answers,.ai-proposal,.chapter-plan),
+  :is(.flow-shell,.workspace) .ai-comparison article { --leaf-paper:#fbf4e4;filter:drop-shadow(0 2px 1px #39271425) drop-shadow(0 5px 7px #241a0a10); }
+  .workspace .story-card { --leaf-paper:#fff7e4; }
+  .workspace .story-card:nth-child(2n) { --leaf-paper:#f5ecd6; }
+  .workspace .story-card p,.workspace .story-card small,.workspace .story-card > span { color:#4c503c; }
+  .workspace .book-intro > p:not(.eyebrow),
+  :is(.flow-shell,.workspace) .ai-proposal-heading > span { color:#50624f; }
+  /* C / reading leaf: a cleaner face, fine gutter, still organic at every size. */
+  .workspace .reader { border:0;border-radius:0;background:transparent;box-shadow:none;padding-inline:clamp(0px,1.5vw,24px); }
+  .workspace .reader-page { --leaf-paper:#fcf6e8; padding:clamp(38px,6vw,92px); }
+  .workspace .reader-page::after { inset:5px -3px -5px 3px; transform:rotate(.12deg); }
+  .workspace .reader-page footer { color:#625c4c; border-color:#8e76524f; }
+  .workspace .reader-page :is(h1,p),.flow-shell .paper-page > p { color:var(--leaf-ink); }
+  .workspace .reader-page .reader-kicker { color:#6e604b; }
+  .workspace .composition-panel { padding:clamp(28px,4vw,48px); }
+  .workspace .chapter-plan { padding:22px; }
+  @media (max-width:600px) {
+    .flow-shell :is(.choice-stage,.writing-stage,.question-stage,.review-stage,.register-stage) { width:calc(100% - 30px);padding:34px 24px 42px; }
+    .flow-shell :is(.writing-stage,.review-stage) { padding-inline:24px; }
+    .workspace .reader { padding-inline:0; }
+    .workspace .reader-page { padding:34px 26px; }
+    .workspace :is(.book-workspace,.panel-page,.composition-panel) { padding:32px 24px; }
+    .workspace .chapter-plan { padding:20px 16px; }
+    .workspace :is(.ai-tools,.book-addition-editor,.ai-proposal) { padding:22px 18px; }
+    .flow-shell .paper-page { padding:32px 22px; }
+  }
+  @media (forced-colors:active) {
+    .flow-shell :is(.choice-stage,.writing-stage,.question-stage,.review-stage,.register-stage,.paper-page,.ai-proposal),
+    .workspace :is(.book-workspace,.panel-page,.reader-page,.composition-panel,.story-card,.ai-tools,.story-materials,.book-addition-editor,.provenance,.interview-answers,.ai-proposal),
+    :is(.flow-shell,.workspace) .ai-comparison article,.workspace .chapter-plan { background:Canvas;color:CanvasText;border:1px solid CanvasText;filter:none; }
+    .flow-shell ::before,.flow-shell ::after,.workspace ::before,.workspace ::after { background-image:none; }
+  }
+}

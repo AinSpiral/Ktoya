@@ -22,7 +22,7 @@ draw = ImageDraw.Draw(canvas)
 font = ImageFont.truetype('C:/Windows/Fonts/arial.ttf',21)
 title = ImageFont.truetype('C:/Windows/Fonts/georgia.ttf',35)
 draw.text((30,24),'КтоЯ · Один живой мир',font=title,fill='#f0e4c9')
-draw.text((30,76),'V2 · реальные локальные экраны · полные оригиналы — в after/',font=font,fill='#c2c8ac')
+draw.text((30,76),'V2 · живые листы · реальные экраны · полные оригиналы — в after/',font=font,fill='#c2c8ac')
 for i,(name,label) in enumerate(items):
     x=30+(i%4)*292
     y=130+(i//4)*638
@@ -32,9 +32,9 @@ for i,(name,label) in enumerate(items):
         canvas.paste(thumbnail,(x,y))
     draw.text((x,y+585),label,font=font,fill='#f0e4c9')
 canvas.save(ROOT/'contact-sheet.png')
-lines = ['# Living World v2 screenshot index', '', 'Actual local QA captures. `before` is baseline 23908bf; `after` is v2.',
+lines = ['# Living World v2 screenshot index', '', 'Actual local QA captures. `before` is baseline 23908bf; `before-living-pages` is intermediate 9d45c2e; `after` is the final living-pages candidate.',
          'Baseline feedback component is the unchanged dialog DOM with v1 CSS restored; it is not a separate baseline deployment.', '']
-for directory in ['before','after','visual']:
+for directory in ['before','before-living-pages','after','visual']:
     lines.extend([f'## {directory}', ''])
     for shot in sorted((ROOT/directory).glob('*.png')):
         lines.append(f'- [{shot.name}]({shot.as_posix()})')
