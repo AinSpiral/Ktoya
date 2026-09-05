@@ -1,5 +1,7 @@
 import { chromium, expect, test, type Page } from '@playwright/test';
 import { audioFixture } from './fixtures';
+import { mkdir } from 'node:fs/promises';
+import { resolve } from 'node:path';
 
 const baseURL = 'http://127.0.0.1:3100';
 
@@ -53,8 +55,11 @@ test('voice feedback: fake mic, re-record, 10-second upload, reload, owner playb
     await login(tester.page);
     await tester.page.getByRole('button', { name: 'Оставить отзыв' }).click();
     const dialog = tester.page.getByRole('dialog', { name: 'Оставить отзыв' });
+    await mkdir(resolve('outputs/living-world-v2/after'), { recursive: true });
+    await tester.page.screenshot({path:resolve('outputs/living-world-v2/after/feedback-dialog-390.png'),animations:'disabled'});
     await dialog.getByRole('button', { name: 'Записать голосом' }).click();
     await expect(dialog.locator('.recording-indicator')).toContainText('00:02');
+    await tester.page.screenshot({path:resolve('outputs/living-world-v2/after/feedback-recording-390.png'),animations:'disabled'});
     await dialog.getByRole('button', { name: 'Остановить' }).click();
     await expect(dialog.getByRole('button', { name: 'Перезаписать' })).toBeVisible();
     await dialog.getByRole('button', { name: 'Перезаписать' }).click();

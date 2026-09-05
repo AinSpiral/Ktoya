@@ -1,9 +1,21 @@
 import { test, expect, chromium, type Page, type TestInfo } from '@playwright/test';
+import { mkdir } from 'node:fs/promises';
+import { resolve } from 'node:path';
 import { audioFixture } from './fixtures';
 import type { AppState } from '../lib/domain';
 
 async function snapshot(page: Page, info: TestInfo, name: string) {
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  const cardContrast=await page.locator('.story-card:not(.add-card)').evaluateAll(cards=>{
+    const rgb=(s:string)=>s.match(/[\d.]+/g)!.slice(0,3).map(Number);
+    const luminance=(c:number[])=>c.map(v=>v/255).map(v=>v<=.04045?v/12.92:((v+.055)/1.055)**2.4).reduce((s,v,i)=>s+v*[.2126,.7152,.0722][i],0);
+    return cards.flatMap(card=>[card,...card.querySelectorAll('h2,p,small,span')].map(el=>{
+      const bg=luminance(rgb(getComputedStyle(card).backgroundColor));
+      const fg=luminance(rgb(getComputedStyle(el).color));
+      return (Math.max(bg,fg)+.05)/(Math.min(bg,fg)+.05);
+    }));
+  });
+  for(const ratio of cardContrast) expect(ratio,'book card text must retain readable contrast after paper restyling').toBeGreaterThanOrEqual(4.5);
   const overlaps = await page.evaluate(() => {
     const buttons = [...document.querySelectorAll<HTMLButtonElement>('.flow-actions button, .reader-tools button, .ai-tool-buttons button')].filter(el => el.offsetWidth && el.offsetHeight);
     return buttons.flatMap((a, i) => buttons.slice(i + 1).filter(b => a.parentElement === b.parentElement).filter(b => {
@@ -13,6 +25,9 @@ async function snapshot(page: Page, info: TestInfo, name: string) {
   });
   expect(overlaps).toEqual([]);
   await page.screenshot({ path: info.outputPath(`${name}.png`), fullPage: true, animations: 'disabled' });
+  const directory = resolve('outputs/living-world-v2/after');
+  await mkdir(directory, { recursive: true });
+  await page.screenshot({ path: resolve(directory, `${name}-${page.viewportSize()!.width}.png`), fullPage: true, animations: 'disabled' });
 }
 async function state(page: Page): Promise<AppState> { return (await page.request.get('/api/friends/state')).json(); }
 async function capture(page: Page) {
@@ -54,7 +69,12 @@ for (const width of [360,390,768,1024,1600]) test(`life book responsive ${width}
     expect(containment.nested && containment.fits).toBe(true);
     for (const value of [containment.left,containment.right,containment.top,containment.bottom]) expect(value).toBeGreaterThanOrEqual(8);
     await info.attach('cover-bounds',{body:JSON.stringify(containment),contentType:'application/json'});
+    await page.locator('.living-legacy').scrollIntoViewIfNeeded();
+    await expect.poll(()=>page.locator('.living-ancestry-figure img').evaluate(e=>(e as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
+    await page.evaluate(()=>window.scrollTo(0,0));
     await snapshot(page,info,'01-landing');
+    await page.locator('.forest-masthead').screenshot({path:resolve(`outputs/living-world-v2/after/hero-${width}.png`),animations:'disabled'});
+    await page.locator('.living-legacy').screenshot({path:resolve(`outputs/living-world-v2/after/tree-clock-${width}.png`),animations:'disabled'});
     await page.locator('.living-book-zone').screenshot({path:info.outputPath('02-closed-book.png')});
     await page.keyboard.press('Tab');
     expect(await page.evaluate(() => document.activeElement?.tagName)).not.toBe('BODY');
@@ -141,15 +161,18 @@ for (const width of [360,390,768,1024,1600]) test(`life book responsive ${width}
     expect((await state(page)).book.compositionRevisions).toHaveLength(2);
     if (width === 390) {
       await page.getByRole('button',{name:'Стиль',exact:true}).click();
+      await snapshot(page,info,'11-style');
       await page.getByRole('button',{name:/Кратко Меньше повторов/}).click();
       await expect.poll(async () => (await state(page)).style).toBe('concise');
       await page.reload();
       await page.locator('.story-card').first().click();
       await expect(page.getByLabel('Стиль предложения')).toHaveValue('concise');
       await page.getByRole('button',{name:'Приватность',exact:true}).click();
+      await snapshot(page,info,'12-privacy');
       await expect(page.getByRole('radio',{name:/Только я/})).toBeChecked();
       await expect(page.getByRole('radio',{name:/Выбранные люди/})).toBeDisabled();
       await page.getByRole('button',{name:'Экспорт',exact:true}).click();
+      await snapshot(page,info,'13-export');
       for (const format of ['JSON','Markdown']) {
         const download = page.waitForEvent('download');
         await page.getByRole('button',{name: new RegExp(format)}).click();
@@ -159,6 +182,7 @@ for (const width of [360,390,768,1024,1600]) test(`life book responsive ${width}
       await page.getByRole('button',{name:'Как будет работать пополнение',exact:true}).click();
       await expect(page.getByText('Оплата пока не подключена',{exact:true})).toBeVisible();
       await page.getByRole('button',{name:'Связь',exact:true}).click();
+      await snapshot(page,info,'14-feedback-panel');
       await page.getByPlaceholder('Расскажи, что стоит изменить…').fill('Синтетическая проверка обратной связи.');
       await page.getByRole('button',{name:'Отправить',exact:true}).click();
       await expect(page.getByText('Спасибо. Сообщение сохранено отдельно от книги.',{exact:true})).toBeVisible();

@@ -4,7 +4,7 @@ import { expect, test, type Browser, type Page } from '@playwright/test';
 import { createEmptyState } from '../lib/domain';
 
 const BASE_URL = 'http://127.0.0.1:3101';
-const OUTPUT_DIRECTORY = resolve('outputs/living-world/final');
+const OUTPUT_DIRECTORY = resolve('outputs/living-world-v2/visual');
 const VIEWPORTS = [
   { width: 360, height: 800, touch: true },
   { width: 390, height: 844, touch: true },
@@ -171,7 +171,7 @@ async function assertHeroIsUsable(page: Page) {
   const selected = await page.locator('.living-world-forest img').evaluate((img) => (img as HTMLImageElement).currentSrc);
   expect(selected).toContain(page.viewportSize()!.width <= 900 ? 'hero-mobile-' : 'hero-desktop-');
   const imageResources = await page.evaluate(() => performance.getEntriesByType('resource')
-    .map(entry => entry.name).filter(name => name.includes('/art/living-world/')));
+    .map(entry => entry.name).filter(name => name.includes('/art/living-world-v2/')));
   expect(imageResources.some(name => name.endsWith('.png')), 'masters must never be delivered to the browser').toBe(false);
   const masthead = page.locator('.forest-masthead');
   await expect(masthead).toBeVisible();
@@ -471,7 +471,7 @@ for (const width of [390, 1024]) {
     const { context, audit } = await newIsolatedContext(browser, { width, height: width === 390 ? 844 : 768 }, { touch: width === 390 });
     // A successful HTTP response with undecodable image bytes exercises native onError
     // without masking console errors from unrelated application failures.
-    await context.route('**/art/living-world/**', route => route.fulfill({ status: 200, contentType: 'image/png', body: 'invalid image fixture' }));
+    await context.route('**/art/living-world-v2/**', route => route.fulfill({ status: 200, contentType: 'image/png', body: 'invalid image fixture' }));
     const page = await context.newPage();
     auditRuntimeErrors(page, audit);
     try {
@@ -491,7 +491,7 @@ test('art loading reserves geometry and preload selects only the matching forest
   const { context, audit } = await newIsolatedContext(browser, { width: 390, height: 844 }, { touch: true });
   let release!: () => void;
   const imagesAllowed = new Promise<void>(resolve => { release = resolve; });
-  await context.route('**/art/living-world/**', async route => { await imagesAllowed; await route.continue(); });
+  await context.route('**/art/living-world-v2/**', async route => { await imagesAllowed; await route.continue(); });
   const page = await context.newPage();
   auditRuntimeErrors(page, audit);
   try {

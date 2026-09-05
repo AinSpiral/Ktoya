@@ -49,6 +49,8 @@ Google Drive используется для личной базы Ильи, а�
 
 README остаётся краткой точкой входа.
 
+Локальная художественная система всех авторских экранов: [22-LIVING-WORLD-SYSTEM-V2.md](22-LIVING-WORLD-SYSTEM-V2.md) — кандидат v2 от `23908bf`, asset provenance, визуальная оценка и границы проверки. Не release approval.
+
 Визуальное evidence локального Stage B: [19-FOREST-ART-DIRECTION.md](19-FOREST-ART-DIRECTION.md) — два art passes, responsive/transition QA и честная граница high-end acceptance; не release approval.
 
 ## 4. Текущий продуктовый baseline
