@@ -7,6 +7,13 @@
 
 # [Не выпущено]
 
+## 05.09.2026 — локальный Forest art direction pass
+
+- Многоплановая original SVG сцена, деревянная конструкция обложки, кремовые страницы, корешок, гравировка, детали и restrained motion; отдельная mobile-композиция и paper/forest переход к capture.
+- Исправлены responsive overflow/заголовок и узкий landing/history guard, обнаруженный целевой проверкой Back/reload.
+- Добавлен отдельный шеститестовый visual/browser suite без внешних провайдеров. Полный прежний regression cycle не повторяется автоматически.
+- Два художественных прохода; material realism/premium feel всё ещё 3/5, high-end acceptance не закрыт. [19 — оценки, assets и evidence](19-FOREST-ART-DIRECTION.md). Local-only; никакого разрешения на выпуск.
+
 ## 05.09.2026 — локальный Stage B: Life Book Experience
 
 - Деревянная procedural/SVG обложка с caption внутри, слои леса и адаптивный editor; пять narrative style contracts, owner-bound голосовая инструкция без попадания в рассказ.

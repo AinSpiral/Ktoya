@@ -10,7 +10,9 @@ import { deriveSpeechKitWav } from '@/lib/audio-derived';
 import { createRecordingBuffer, mergeRecognitionUpdate, restoreInterruptedFragment } from '@/lib/recording-lifecycle';
 import { mergeCaptureAutosave } from '@/lib/capture-autosave';
 import { LifeBookArtwork } from './life-book-artwork';
+import { ForestBackdrop } from './forest-scene';
 import './life-book.css';
+import './forest-hero.css';
 import { STORY_STYLES, type NarrativeStyle } from '@/lib/story-styles';
 import { BookCompositionPanel, PrintableBook } from './book-composition-panel';
 
@@ -313,13 +315,14 @@ export default function Home() {
   useEffect(() => {
     const current = window.history.state as { ktoyaView?: View; ktoyaFlow?: boolean } | null;
     const requested = viewFromLocation();
-    if (view === 'landing' && (current?.ktoyaView ?? requested) !== 'landing') return;
+    // Protect the initial deep link during hydration, not an explicit return home.
+    if (!loaded && view === 'landing' && (current?.ktoyaView ?? requested) !== 'landing') return;
     if (current?.ktoyaView !== view) {
       const state = { ...(current ?? {}), ktoyaFlow: true, ktoyaView: view };
       if (current?.ktoyaFlow) window.history.pushState(state, '', `#${view}`);
       else window.history.replaceState(state, '', `#${view}`);
     }
-  }, [view]);
+  }, [view, loaded]);
   useEffect(() => {
     const onPopState = (event: PopStateEvent) => {
       if (recordingTransitionRef.current) {
@@ -1193,6 +1196,8 @@ export default function Home() {
   if (view === 'landing') {
     return (
       <main className="landing" id="top">
+        <div className="forest-masthead">
+        <ForestBackdrop />
         <header className="site-header">
           <a className="wordmark" href="#top" aria-label="КтоЯ — на главную">КтоЯ<span>.</span></a>
           <nav aria-label="Главная навигация"><a href="#how">Как работает</a><a href="#privacy">Приватность</a><button className="header-login" onClick={() => appState.stories.length ? openWorkspace() : setView('first-choice')}>{appState.stories.length ? 'Моя книга' : 'Войти'}</button></nav>
@@ -1200,12 +1205,14 @@ export default function Home() {
         <section className="hero">
           <div className="hero-copy">
             <p className="eyebrow">КтоЯ — Книга жизни</p>
-            <h1>Твоя жизнь<br />заслуживает книги</h1>
-            <p className="hero-lead">Рассказывай голосом или текстом. «КтоЯ» поможет бережно сохранить воспоминания и собрать из них настоящую Книгу жизни — только из твоих слов.</p>
+            <h1>Твоя жизнь{' '}<br />заслуживает книги</h1>
+            <p className="hero-lead">Рассказывай, как вспоминается.<br className="desktop-breath" /> Сохрани свой голос, близких и мгновения —<br className="desktop-breath" /> в книге, которую хочется передать.</p>
             <div className="hero-actions"><button className="button-primary" onClick={() => setView('first-choice')}>Начать свою книгу</button>{hasCaptureDraft && <button className="button-secondary" onClick={() => setView('capture')}>Продолжить сохранённый черновик</button>}<span className="privacy-note"><span>●</span> Всё созданное видно только тебе</span></div>
           </div>
           <LifeBookArtwork />
         </section>
+        <div className="forest-footer-note" aria-hidden="true"><span>У каждой жизни есть свои корни.</span><span>И истории, которые продолжают расти.</span></div>
+        </div>
         <section className="meaning-strip" aria-label="Три смысла КтоЯ"><article><span>01</span><h2>Сохранить</h2><p>Воспоминания, мысли, любовь, юмор и голос личности.</p></article><article><span>02</span><h2>Понять</h2><p>Увидеть свой путь, решения, рост и то, что уже удалось преодолеть.</p></article><article><span>03</span><h2>Передать</h2><p>Оставить близким не только даты, а ощущение живого человека.</p></article></section>
         <section className="editorial-section how" id="how"><p className="eyebrow">Как работает</p><h2>Из живого рассказа —<br />в страницу твоей книги</h2><div className="process-grid"><article><b>1</b><h3>Рассказать</h3><p>Голосом или текстом, как вспоминается. Красиво говорить не нужно.</p></article><article><b>2</b><h3>Раскрыть</h3><p>Один бережный вопрос помогает заметить то, что действительно важно.</p></article><article><b>3</b><h3>Сохранить</h3><p>Проверь каждое слово, исправь и только потом добавь историю в книгу.</p></article></div></section>
         <section className="truth-section"><div><p className="eyebrow">Честный ИИ</p><h2>Помогает услышать тебя.<br />Не сочиняет тебя.</h2></div><div className="truth-note"><span>“</span><p>Если факта нет в твоём рассказе, его не будет и в истории. Первая Beta собирает текст детерминированно — только из введённых тобой слов.</p><b>Составлено только из твоих слов</b></div></section>

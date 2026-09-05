@@ -49,6 +49,8 @@ Google Drive используется для личной базы Ильи, а�
 
 README остаётся краткой точкой входа.
 
+Визуальное evidence локального Stage B: [19-FOREST-ART-DIRECTION.md](19-FOREST-ART-DIRECTION.md) — два art passes, responsive/transition QA и честная граница high-end acceptance; не release approval.
+
 ## 4. Текущий продуктовый baseline
 
 Ближайшая цель — первая реально полезная платная Beta «КтоЯ — Книга жизни».

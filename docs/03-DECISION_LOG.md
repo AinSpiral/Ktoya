@@ -206,6 +206,10 @@ Alice AI LLM разрешена только как ограниченный н�
 
 Проверка локальной реализации и точные DONE/PARTIAL/FUTURE/BLOCKED: [18 — acceptance](18-PR12-AI-ACCEPTANCE-MATRIX.md). Эти статусы важнее предположения, что наличие кнопки означает production-интеграцию.
 
+### KTOYA-D058. Локальный художественный проход не равен high-end acceptance
+
+**05.09.2026.** По отдельному brief выполнены два ограниченных художественных прохода landing/hero/closed book и перехода к capture. Оригинальные procedural assets, статичная композиция, reduced motion и пять viewport обязательны; AI/editor/book-composition не перерабатываются. После двух проходов material realism и premium feel оценены 3/5: художественная цель не объявляется достигнутой. Найденный при проверке Back/reload landing-history дефект исправляется узко и закрепляется targeted regression. Отдельный local commit и новый formal security scan новой delta не разрешают push/merge. Evidence и оценки: [19 — Art direction](19-FOREST-ART-DIRECTION.md).
+
 ## 5. Действительно открытые решения
 
 ### Приоритетные для технической архитектуры после визуальной проверки UX
