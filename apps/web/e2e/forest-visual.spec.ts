@@ -4,7 +4,7 @@ import { expect, test, type Browser, type Page } from '@playwright/test';
 import { createEmptyState } from '../lib/domain';
 
 const BASE_URL = 'http://127.0.0.1:3101';
-const OUTPUT_DIRECTORY = resolve('outputs/forest-art/final');
+const OUTPUT_DIRECTORY = resolve('outputs/hybrid-art/final');
 const VIEWPORTS = [
   { width: 360, height: 800, touch: true },
   { width: 390, height: 844, touch: true },
@@ -147,6 +147,20 @@ async function assertNoHorizontalOverflow(page: Page) {
 }
 
 async function assertHeroIsUsable(page: Page) {
+  await expect(page.locator('.hybrid-forest')).toHaveAttribute('data-ready', 'true');
+  await expect(page.locator('.hybrid-book-slot')).toHaveAttribute('data-ready', 'true');
+  const selected = await page.locator('.hybrid-forest img').evaluate((img) => (img as HTMLImageElement).currentSrc);
+  const titleStyle = await page.locator('.hybrid-cover-title').evaluate(element => {
+    const style = getComputedStyle(element);
+    return { fontSize: parseFloat(style.fontSize), position: style.position, opacity: style.opacity,
+      fits: element.scrollWidth <= element.clientWidth && element.scrollHeight <= element.clientHeight };
+  });
+  expect(titleStyle, 'legacy paragraph CSS must not displace or miniaturize the cover title')
+    .toEqual({ fontSize: 84, position: 'relative', opacity: '1', fits: true });
+  expect(selected).toContain(page.viewportSize()!.width <= 900 ? 'forest-mobile-' : 'forest-desktop-');
+  const imageResources = await page.evaluate(() => performance.getEntriesByType('resource')
+    .map(entry => entry.name).filter(name => name.includes('/art/life-book/')));
+  expect(imageResources.some(name => name.endsWith('.png')), 'masters must never be delivered to the browser').toBe(false);
   const masthead = page.locator('.forest-masthead');
   await expect(masthead).toBeVisible();
   await expect(masthead.locator('.forest-world')).toHaveAttribute('aria-hidden', 'true');
@@ -363,7 +377,7 @@ async function exerciseStoryEntryAndReturn(page: Page, width: number) {
   await expect(page.locator('.forest-masthead')).toBeVisible();
 }
 
-test.describe.configure({ mode: 'serial' });
+test.describe.configure({ mode: 'default' });
 
 for (const viewport of VIEWPORTS) {
   test(`forest hero ${viewport.width}x${viewport.height}`, async ({ browser }) => {
@@ -440,13 +454,13 @@ test('reduced motion disables forest animation and resets parallax', async ({ br
     await page.mouse.move(masthead!.x + masthead!.width * 0.9, masthead!.y + masthead!.height * 0.8);
     expect(await readParallax(page)).toEqual({ x: 0, y: 0 });
 
-    const motionStyles = await page.locator('.forest-far, .forest-middle, .forest-near, .book-scene').evaluateAll((elements) =>
+    const motionStyles = await page.locator('.forest-far, .forest-middle, .forest-near, .book-scene, .hybrid-forest picture, .raster-book-object').evaluateAll((elements) =>
       elements.map((element) => {
         const style = getComputedStyle(element);
         return { animationName: style.animationName, transform: style.transform };
       }),
     );
-    expect(motionStyles).toHaveLength(4);
+    expect(motionStyles).toHaveLength(6);
     for (const style of motionStyles) {
       expect(style.animationName, 'decorative animation must be disabled for reduced motion').toBe('none');
       expect(style.transform, 'parallax transform must be reset for reduced motion').toBe('none');
@@ -455,4 +469,52 @@ test('reduced motion disables forest animation and resets parallax', async ({ br
   } finally {
     await context.close();
   }
+});
+
+for (const width of [390, 1024]) {
+  test(`raster decoding fallback preserves entry at ${width}`, async ({ browser }) => {
+    const { context, audit } = await newIsolatedContext(browser, { width, height: width === 390 ? 844 : 768 }, { touch: width === 390 });
+    // A successful HTTP response with undecodable image bytes exercises native onError
+    // without masking console errors from unrelated application failures.
+    await context.route('**/art/life-book/**', route => route.fulfill({ status: 200, contentType: 'image/png', body: 'invalid image fixture' }));
+    const page = await context.newPage();
+    auditRuntimeErrors(page, audit);
+    try {
+      await page.goto('/#landing', { waitUntil: 'networkidle' });
+      await expect(page.locator('.hybrid-forest')).toHaveAttribute('data-ready', 'false');
+      await expect(page.locator('.hybrid-book-slot')).toHaveAttribute('data-ready', 'false');
+      await expect(page.locator('.book-scene:visible')).toHaveCount(1);
+      await expect(page.locator('.walnut-surface')).toBeVisible();
+      await assertNoHorizontalOverflow(page);
+      await assertVisibleKeyboardFocus(page);
+      await exerciseStoryEntryAndReturn(page, 0);
+      assertAuditIsClean(audit);
+    } finally { await context.close(); }
+  });
+}
+
+test('art loading reserves geometry and preload selects only the matching forest', async ({ browser }) => {
+  const { context, audit } = await newIsolatedContext(browser, { width: 390, height: 844 }, { touch: true });
+  let release!: () => void;
+  const imagesAllowed = new Promise<void>(resolve => { release = resolve; });
+  await context.route('**/art/life-book/**', async route => { await imagesAllowed; await route.continue(); });
+  const page = await context.newPage();
+  auditRuntimeErrors(page, audit);
+  try {
+    await page.goto('/#landing', { waitUntil: 'domcontentloaded' });
+    await page.evaluate(() => document.fonts.ready);
+    const before = await page.locator('.hybrid-book-slot').boundingBox();
+    const ctaBefore = await page.locator('.forest-masthead').getByRole('button', { name: 'Начать свою книгу' }).boundingBox();
+    release();
+    await expect(page.locator('.hybrid-book-slot')).toHaveAttribute('data-ready', 'true');
+    await expect(page.locator('.hybrid-forest')).toHaveAttribute('data-ready', 'true');
+    const after = await page.locator('.hybrid-book-slot').boundingBox();
+    const ctaAfter = await page.locator('.forest-masthead').getByRole('button', { name: 'Начать свою книгу' }).boundingBox();
+    expect(after).toEqual(before);
+    expect(ctaAfter).toEqual(ctaBefore);
+    const resources = await page.evaluate(() => performance.getEntriesByType('resource').map(entry => entry.name));
+    expect(resources.filter(name => name.includes('forest-desktop-'))).toEqual([]);
+    expect(resources.filter(name => name.includes('forest-mobile-'))).toHaveLength(1);
+    assertAuditIsClean(audit);
+  } finally { release(); await context.close(); }
 });

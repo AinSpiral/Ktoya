@@ -210,6 +210,10 @@ Alice AI LLM разрешена только как ограниченный н�
 
 **05.09.2026.** По отдельному brief выполнены два ограниченных художественных прохода landing/hero/closed book и перехода к capture. Оригинальные procedural assets, статичная композиция, reduced motion и пять viewport обязательны; AI/editor/book-composition не перерабатываются. После двух проходов material realism и premium feel оценены 3/5: художественная цель не объявляется достигнутой. Найденный при проверке Back/reload landing-history дефект исправляется узко и закрепляется targeted regression. Отдельный local commit и новый formal security scan новой delta не разрешают push/merge. Evidence и оценки: [19 — Art direction](19-FOREST-ART-DIRECTION.md).
 
+### KTOYA-D059. Реализм hero переносится в оригинальные raster assets
+
+**05.09.2026.** По отдельному брифу hybrid hero реализуется от 110e01b в новой локальной ветке, сохраняя procedural baseline и load fallback. Native image generation создаёт оригинальные лесные композиции и отдельную книгу; текст и CTA остаются HTML, плоскость обложки учитывает перспективу. Никаких новых платных API/ключей, изменений AI/data model и публикации. Provenance, координаты, derivatives и границы проверок: [20 — Hybrid assets](20-HYBRID-HERO-ASSETS.md). Новый formal scan обязателен для нового commit; прежний PASS не наследуется.
+
 ## 5. Действительно открытые решения
 
 ### Приоритетные для технической архитектуры после визуальной проверки UX

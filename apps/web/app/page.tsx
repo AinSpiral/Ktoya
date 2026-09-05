@@ -9,10 +9,10 @@ import type { VoiceProviderCapabilities } from '@/lib/voice-provider-registry';
 import { deriveSpeechKitWav } from '@/lib/audio-derived';
 import { createRecordingBuffer, mergeRecognitionUpdate, restoreInterruptedFragment } from '@/lib/recording-lifecycle';
 import { mergeCaptureAutosave } from '@/lib/capture-autosave';
-import { LifeBookArtwork } from './life-book-artwork';
-import { ForestBackdrop } from './forest-scene';
+import { HybridBookArtwork, HybridForestBackdrop } from './hybrid-hero';
 import './life-book.css';
 import './forest-hero.css';
+import './hybrid-hero.css';
 import { STORY_STYLES, type NarrativeStyle } from '@/lib/story-styles';
 import { BookCompositionPanel, PrintableBook } from './book-composition-panel';
 
@@ -1197,7 +1197,7 @@ export default function Home() {
     return (
       <main className="landing" id="top">
         <div className="forest-masthead">
-        <ForestBackdrop />
+        <HybridForestBackdrop />
         <header className="site-header">
           <a className="wordmark" href="#top" aria-label="КтоЯ — на главную">КтоЯ<span>.</span></a>
           <nav aria-label="Главная навигация"><a href="#how">Как работает</a><a href="#privacy">Приватность</a><button className="header-login" onClick={() => appState.stories.length ? openWorkspace() : setView('first-choice')}>{appState.stories.length ? 'Моя книга' : 'Войти'}</button></nav>
@@ -1209,7 +1209,7 @@ export default function Home() {
             <p className="hero-lead">Рассказывай, как вспоминается.<br className="desktop-breath" /> Сохрани свой голос, близких и мгновения —<br className="desktop-breath" /> в книге, которую хочется передать.</p>
             <div className="hero-actions"><button className="button-primary" onClick={() => setView('first-choice')}>Начать свою книгу</button>{hasCaptureDraft && <button className="button-secondary" onClick={() => setView('capture')}>Продолжить сохранённый черновик</button>}<span className="privacy-note"><span>●</span> Всё созданное видно только тебе</span></div>
           </div>
-          <LifeBookArtwork />
+          <HybridBookArtwork />
         </section>
         <div className="forest-footer-note" aria-hidden="true"><span>У каждой жизни есть свои корни.</span><span>И истории, которые продолжают расти.</span></div>
         </div>

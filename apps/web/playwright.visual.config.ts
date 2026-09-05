@@ -6,7 +6,7 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   retries: 0,
-  reporter: [['list'], ['json', { outputFile: 'outputs/forest-art/final/test-results.json' }]],
+  reporter: [['list'], ['json', { outputFile: 'outputs/hybrid-art/final/test-results.json' }]],
   use: {
     channel: 'chrome',
     baseURL: 'http://127.0.0.1:3101',
