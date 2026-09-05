@@ -14,7 +14,8 @@
     {
       "binding": "FRIENDS_DB",
       "database_name": "ktoya-friends-beta-db",
-      "database_id": "057231e4-8fde-445b-8fc1-84ce624f5c43"
+      "database_id": "057231e4-8fde-445b-8fc1-84ce624f5c43",
+      "migrations_dir": "db/migrations"
     }
   ],
   "r2_buckets": [
@@ -25,7 +26,7 @@
   ],
   "vars": {
     "FRIENDS_BETA_MODE": "true",
-    "FRIENDS_BUILD_ID": "friends-beta-local"
+    "FRIENDS_BUILD_ID": "friends-beta-2026-09-05"
   },
   "observability": { "enabled": false }
 }

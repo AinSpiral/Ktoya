@@ -121,8 +121,8 @@ export async function saveFeedback(input: {
 }) {
   const submission = parseFeedbackForm(input.form);
   const now = input.now ?? new Date().toISOString();
-  const existing = await input.db.prepare('SELECT tester_session_id, status FROM friends_feedback WHERE feedback_id = ?')
-    .bind(submission.id).first<{ tester_session_id: string; status: FeedbackStatus }>();
+  const existing = await input.db.prepare('SELECT tester_session_id, status, audio_key, audio_bytes FROM friends_feedback WHERE feedback_id = ?')
+    .bind(submission.id).first<{ tester_session_id: string; status: FeedbackStatus; audio_key: string | null; audio_bytes: number | null }>();
   if (existing) {
     if (existing.tester_session_id !== input.sessionId) throw new FeedbackSubmissionError('id_conflict', 409, 'Идентификатор отзыва уже используется.');
     return { id: submission.id, duplicate: true, status: existing.status };
@@ -187,7 +187,25 @@ export async function saveFeedback(input: {
   // If R2 succeeded but the metadata transaction fails, keep the reservation.
   // This intentionally fails closed: an orphaned private object must still count
   // against the hard 500 MB ceiling until an owner performs a manual audit.
-  await input.db.batch(statements);
+  try {
+    await input.db.batch(statements);
+  } catch (error) {
+    if (submission.audio && audioKey) {
+      const committed = await input.db.prepare('SELECT tester_session_id, status, audio_key, audio_bytes FROM friends_feedback WHERE feedback_id = ?')
+        .bind(submission.id).first<{ tester_session_id: string; status: FeedbackStatus; audio_key: string | null; audio_bytes: number | null }>();
+      if (committed?.tester_session_id === input.sessionId
+        && committed.audio_key === audioKey
+        && committed.audio_bytes === submission.audio.size) {
+        // A concurrent identical request already committed and owns the stored
+        // bytes. Release only this request's extra reservation.
+        await releaseReservation(input.db, submission.audio.size, now);
+        return { id: submission.id, duplicate: true, status: committed.status };
+      }
+    }
+    // R2 may already contain this request's object. Keep its reservation unless
+    // a committed identical row proves that another transaction accounts for it.
+    throw error;
+  }
   return { id: submission.id, duplicate: false, status: 'NEW' as const };
 }
 
@@ -198,6 +216,11 @@ export async function reserveClassBOperation(db: D1Database, now = new Date().to
     WHERE scope = 'global' AND class_b_operations < ?`)
     .bind(now, FRIENDS_BETA_LIMITS.classBPerMonth).run();
   if ((result.meta.changes ?? 0) < 1) throw new FeedbackSubmissionError('class_b_limit', 429, 'Месячный лимит чтения аудио Friends Beta достигнут.');
+}
+
+export async function hasMeteredR2Object(db: D1Database, bucket: R2Bucket, key: string) {
+  await reserveClassBOperation(db);
+  return Boolean(await bucket.head(key));
 }
 
 export async function saveSessionMedia(input: {
@@ -229,8 +252,9 @@ export async function saveSessionMedia(input: {
       customMetadata: { ownerSessionId: input.sessionId },
     });
   } catch (error) {
-    // Keep the reservation after a successful R2 write so quota accounting
-    // remains conservative even if the D1 metadata transaction failed.
+    // R2 rejected the write, so no new object from this request can consume the
+    // reserved capacity. The attempted Class A operation remains counted.
+    await releaseReservation(input.db, input.bytes.byteLength, now);
     throw error;
   }
   try {
@@ -245,7 +269,15 @@ export async function saveSessionMedia(input: {
         WHERE scope = 'global'`).bind(input.bytes.byteLength, input.bytes.byteLength, now),
     ]);
   } catch (error) {
-    await releaseReservation(input.db, input.bytes.byteLength, now);
+    const committed = await input.db.prepare('SELECT owner_session_id, byte_size FROM friends_media_objects WHERE object_key = ?')
+      .bind(input.objectKey).first<{ owner_session_id: string; byte_size: number }>();
+    if (committed?.owner_session_id === input.sessionId && committed.byte_size === input.bytes.byteLength) {
+      // A concurrent identical request already committed and owns the object.
+      await releaseReservation(input.db, input.bytes.byteLength, now);
+      return { key: input.objectKey, duplicate: true };
+    }
+    // After a successful R2 write an unknown D1 failure must fail closed. The
+    // reservation remains until an owner audit can prove an orphan is absent.
     throw error;
   }
   return { key: input.objectKey, duplicate: false };
