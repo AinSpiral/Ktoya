@@ -77,13 +77,16 @@ async function reserveConnected(input: { config: AliceTrialConfig; provider: Ali
 export async function handleAIOperation(
   request: NextRequest,
   runtimeEnv: Cloudflare.Env,
-  options?: { userId?: string; db?: D1Database; forceDeterministic?: boolean },
+  options?: { userId?: string; db?: D1Database; forceDeterministic?: boolean; allowSyntheticFixtures?: boolean },
 ) {
   const userId = options?.userId ?? authenticatedUserId(request.headers, request.nextUrl.hostname === 'localhost' || request.nextUrl.hostname === '127.0.0.1');
   if (!userId) return NextResponse.json({ error: 'authentication_required' }, { status: 401 });
   const db = options?.db ?? runtimeEnv.DB;
   const body = await request.json() as GenerateBody | MutationBody;
   if (!validId(body.operationId)) return NextResponse.json({ error: 'invalid_operation_id' }, { status: 400 });
+  if (options?.forceDeterministic && !options.allowSyntheticFixtures && !['apply-preview','keep-original','undo'].includes(body.action)) {
+    return NextResponse.json({ error:'semantic_ai_unavailable', message:'Сборка истории ИИ сейчас не подключена в этой тестовой версии. Исходные материалы сохранены.' }, { status:503 });
+  }
   let reservedConnectedOperationId: string | null = null;
   let reservedConfig: AliceTrialConfig | null = null;
   let providerUsage: { inputTokens: number; outputTokens: number } | null = null;

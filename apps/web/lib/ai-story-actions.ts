@@ -1,7 +1,7 @@
 import type { AIAssemblyProposal, AIInterviewDecision, AIProviderResult, AIRephraseProposal } from './adapters';
 import type { AITargetedPatch, AIStoryPreview, CaptureDraft, InterviewQuestion, Story, StoryTitleRevision } from './domain';
 import { assertAllowedSourceIds, contextForCaptureDraft, contextForStory } from './ai-story-context';
-import { assertNoUnsupportedLexicalAnchors } from './ai-output-safety';
+import { assertGroundedQuestion, assertNoUnsupportedLexicalAnchors } from './ai-output-safety';
 import { assembleCaptureDraft } from './story-logic';
 
 const SAFE_INTERVIEW_LANGUAGE: Record<InterviewQuestion['category'], { question: (quote: string) => string; purpose: string }> = {
@@ -37,6 +37,16 @@ export function appendInterviewDecision(draft: CaptureDraft, operationId: string
   const context = contextForCaptureDraft(draft);
   assertAllowedSourceIds(context, result.value.relatedSourceIds);
   const safe = safeInterviewWording(context, result.value);
+  if (provider === 'yandex-ai-studio' || provider === 'synthetic-semantic-fixture') {
+    const proposed = result.value;
+    if (!context.sources.some(source => proposed.relatedSourceIds.includes(source.id) && source.text.includes(proposed.anchorQuote))) throw new Error('Semantic question requires an exact source anchor.');
+    if (!proposed.question.trim() || proposed.question.length > 500 || !proposed.purpose.trim()) throw new Error('Semantic question requires one bounded purposeful question.');
+    assertNoUnsupportedLexicalAnchors(context, proposed.question);
+    assertGroundedQuestion(context, proposed.question);
+    safe.question = proposed.question;
+    safe.purpose = proposed.purpose;
+    safe.anchorQuote = proposed.anchorQuote;
+  }
   const normalized = safe.question.replace(/\s+/g, ' ').trim().toLocaleLowerCase('ru-RU');
   if ((draft.interviewQuestions ?? []).some((question) => question.text.replace(/\s+/g, ' ').trim().toLocaleLowerCase('ru-RU') === normalized)) throw new Error('AI attempted to repeat an already asked question.');
   const question: InterviewQuestion = {
@@ -52,7 +62,7 @@ export function makeAssemblyPreview(draft: CaptureDraft, operationId: string, pr
   assertAllowedSourceIds(context, sourceIds);
   for (const segment of result.value.provenance) assertAllowedSourceIds(context, segment.sourceIds);
   assertNoUnsupportedLexicalAnchors(context, `${result.value.title}\n${result.value.storyText}`);
-  return { id: crypto.randomUUID(), operationId, type: 'assembly', provider, model: result.model, createdAt: new Date().toISOString(), status: 'pending', sourceIds, title: result.value.title, storyText: result.value.storyText, provenance: result.value.provenance, uncertainties: result.value.uncertainties };
+  return { id: crypto.randomUUID(), operationId, type: 'assembly', provider, model: result.model, createdAt: new Date().toISOString(), status: 'pending', sourceSnapshot:JSON.stringify(context.sources), sourceIds, title: result.value.title, storyText: result.value.storyText, provenance: result.value.provenance, uncertainties: result.value.uncertainties };
 }
 
 export function makeRephrasePreview(story: Story, operationId: string, provider: string, result: AIProviderResult<AIRephraseProposal>): AIStoryPreview {
@@ -74,6 +84,7 @@ export function applyAssemblyPreview(draft: CaptureDraft, previewId: string) {
   const preview = draft.aiPreviews?.find((item) => item.id === previewId && item.type === 'assembly');
   if (preview && draft.assembledDraft?.revisions.some((revision) => revision.operationId === preview.operationId)) return draft;
   if (!preview?.storyText || !preview.title || preview.status !== 'pending') throw new Error('Assembly preview is unavailable or already resolved.');
+  if (preview.sourceSnapshot && preview.sourceSnapshot !== JSON.stringify(contextForCaptureDraft(draft).sources)) throw new Error('Source material changed after this preview. Create a new proposal.');
   const base = assembleCaptureDraft(draft);
   if (!base) throw new Error('Confirmed source material is required.');
   const now = new Date().toISOString();

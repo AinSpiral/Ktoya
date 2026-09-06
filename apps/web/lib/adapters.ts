@@ -19,12 +19,15 @@ export interface AIStorySourceInput {
   kind: 'typed' | 'transcript' | 'interview-answer' | 'manual-edit';
   text: string;
   questionId?: string;
+  transcriptStatus?: string;
+  authorEdited?: boolean;
+  recordedAt?: string;
 }
 
 export interface AIStoryContextInput {
   storyId: string;
   sources: AIStorySourceInput[];
-  askedQuestions: Array<{ questionId: string; question: string; category?: InterviewQuestionCategory; answer?: string }>;
+  askedQuestions: Array<{ questionId: string; question: string; category?: InterviewQuestionCategory; answer?: string; disposition?: 'skipped' }>;
   currentTitle?: string;
   currentText?: string;
   currentRevisionId?: string;
@@ -226,6 +229,8 @@ export class HttpVoiceProcessingAdapter {
 }
 
 export interface AIProviderCapabilities {
+  semanticAvailable?: boolean;
+  fixtureMode?: boolean;
   mode: 'deterministic' | 'connected';
   provider: string;
   model: string;

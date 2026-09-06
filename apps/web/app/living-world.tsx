@@ -4,8 +4,8 @@ import { useLayoutEffect, useRef, useState } from 'react';
 import { ForestBackdrop } from './forest-scene';
 import { LifeBookArtwork } from './life-book-artwork';
 
-const ROOT = '/art/living-world-v2/';
-const desktop = (format: string) => `${ROOT}hero-desktop-1200.${format} 1200w, ${ROOT}hero-desktop-1584.${format} 1584w`;
+const ROOT = '/art/living-world-v3/';
+const desktop = (format: string) => `${ROOT}hero-desktop-1200.${format} 1200w, ${ROOT}hero-desktop-1536.${format} 1536w`;
 const mobile = (format: string) => `${ROOT}hero-mobile-768.${format} 768w, ${ROOT}hero-mobile-1024.${format} 1024w`;
 const roots = (format: string) => `${ROOT}tree-ring-clock-640.${format} 640w, ${ROOT}tree-ring-clock-1200.${format} 1200w`;
 
@@ -20,7 +20,7 @@ export function LivingWorldBackdrop() {
         <source media="(max-width: 900px)" type="image/avif" srcSet={mobile('avif')} sizes="100vw" />
         <source media="(max-width: 900px)" type="image/webp" srcSet={mobile('webp')} sizes="100vw" />
         <source type="image/avif" srcSet={desktop('avif')} sizes="100vw" />
-        <img src={`${ROOT}hero-desktop-1200.webp`} srcSet={desktop('webp')} sizes="100vw" width="1586" height="992" alt="" fetchPriority="high" loading="eager" onLoad={() => setReady(true)} onError={() => setReady(false)} />
+        <img src={`${ROOT}hero-desktop-1200.webp`} srcSet={desktop('webp')} sizes="100vw" width="1536" height="1024" alt="" fetchPriority="high" loading="eager" onLoad={() => setReady(true)} onError={() => setReady(false)} />
       </picture>
     </div>
     <ForestBackdrop />
@@ -38,13 +38,13 @@ export function LivingBookArtwork() {
       const frame = image.getBoundingClientRect();
       const origin = element.getBoundingClientRect();
       const portrait = window.matchMedia('(max-width: 900px)').matches;
-      const width = portrait ? 1024 : 1586;
-      const height = portrait ? 1536 : 992;
+      const width = portrait ? 1024 : 1536;
+      const height = portrait ? 1536 : 1024;
       const scale = Math.max(frame.width / width, frame.height / height);
       const offsetX = frame.left - origin.left + (frame.width - width * scale) / 2;
       const offsetY = frame.top - origin.top + (frame.height - height * scale) / 2;
       // Measured front-board corners of the approved masters: TL, TR, BR, BL.
-      const corners = portrait ? [[407,532],[743,538],[635,1205],[295,1140]] : [[936,194],[1354,170],[1280,800],[845,766]];
+      const corners = portrait ? [[390,597],[835,595],[765,1258],[290,1226]] : [[959,287],[1361,250],[1281,876],[853,850]];
       const [p0,p1,p2,p3] = corners.map(([x,y]) => [offsetX + x * scale,offsetY + y * scale]);
       const dx1=p1[0]-p2[0],dx2=p3[0]-p2[0],dx3=p0[0]-p1[0]+p2[0]-p3[0];
       const dy1=p1[1]-p2[1],dy2=p3[1]-p2[1],dy3=p0[1]-p1[1]+p2[1]-p3[1];

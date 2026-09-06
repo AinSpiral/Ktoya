@@ -44,7 +44,7 @@ async function session(fixture: 'story' | 'answer' | 'long' = 'story') {
 }
 
 async function capture(page: Page) {
-  await page.getByRole('button', { name: 'Начать свою книгу', exact: true }).first().click();
+  await page.getByRole('button', { name: 'Рассказать первую историю', exact: true }).first().click();
   await page.getByRole('button', { name: 'Да, хочу рассказать', exact: true }).click();
   await expect(page.getByLabel('Твоя история', { exact: true })).toBeVisible();
 }
@@ -153,7 +153,7 @@ for (const failure of ['NotAllowedError', 'NotFoundError'] as const) {
         navigator.mediaDevices.getUserMedia = () => Promise.reject(new DOMException('Synthetic device failure', name));
       }, failure);
       await s.page.getByRole('button', { name: 'Начать запись', exact: true }).click();
-      await expect(s.page.getByRole('status')).toContainText('Доступ к микрофону не получен');
+      await expect(s.page.getByRole('status').filter({hasText:'Доступ к микрофону не получен'})).toContainText('Доступ к микрофону не получен');
       await expect(s.page.locator('.fragment-card')).toHaveCount(0);
       await expect.poll(async () => (await persisted(s.page)).captureDrafts![0].sourceText).toBe('Этот синтетический текст должен остаться.');
       await s.page.reload();

@@ -141,7 +141,7 @@ test('text fallback, idempotence, CSRF, and Tester A / Tester B isolation', asyn
     expect(duplicate.status).toBe(200);
     expect(duplicate.body.duplicate).toBe(true);
 
-    await a.page.getByRole('button', { name: 'Начать свою книгу', exact: true }).first().click();
+    await a.page.getByRole('button', { name: 'Рассказать первую историю', exact: true }).first().click();
     await a.page.getByRole('button', { name: 'Да, хочу рассказать', exact: true }).click();
     await a.page.getByLabel('Твоя история', { exact: true }).fill('Отдельная история Tester A.');
     await expect.poll(async () => a.page.evaluate(async () => (await fetch('/api/friends/state')).status)).toBe(200);

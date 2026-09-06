@@ -5,6 +5,9 @@ import { audioFixture } from './fixtures';
 import type { AppState } from '../lib/domain';
 
 async function snapshot(page: Page, info: TestInfo, name: string) {
+  const overflow = await page.evaluate(() => [...document.querySelectorAll('body *')].filter(e=>{const r=e.getBoundingClientRect();return e instanceof HTMLElement&&r.width>0&&(r.right>innerWidth+1||r.left < -1)&&getComputedStyle(e).position!=='absolute';}).map(e=>({tag:e.tagName,class:e.className,right:e.getBoundingClientRect().right,width:e.getBoundingClientRect().width})).slice(0,80));
+  await info.attach(`${name}-overflow`,{body:JSON.stringify(overflow),contentType:'application/json'});
+  if (await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth)) throw new Error(`Page overflow: ${JSON.stringify(overflow)}`);
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   const cardContrast=await page.locator('.story-card:not(.add-card),.book-workspace').evaluateAll(cards=>{
     const rgb=(s:string)=>s.match(/[\d.]+/g)!.slice(0,3).map(Number);
@@ -41,13 +44,13 @@ async function snapshot(page: Page, info: TestInfo, name: string) {
   });
   expect(overlaps).toEqual([]);
   await page.screenshot({ path: info.outputPath(`${name}.png`), fullPage: true, animations: 'disabled' });
-  const directory = resolve('outputs/living-world-v2/after');
+  const directory = resolve('outputs/living-world-v3/after');
   await mkdir(directory, { recursive: true });
   await page.screenshot({ path: resolve(directory, `${name}-${page.viewportSize()!.width}.png`), fullPage: true, animations: 'disabled' });
 }
 async function state(page: Page): Promise<AppState> { return (await page.request.get('/api/friends/state')).json(); }
 async function capture(page: Page) {
-  await page.getByRole('button', { name: 'Начать свою книгу', exact: true }).first().click();
+  await page.getByRole('button', { name: 'Рассказать первую историю', exact: true }).first().click();
   await page.getByRole('button', { name: 'Да, хочу рассказать', exact: true }).click();
 }
 async function finish(page: Page) {
@@ -89,8 +92,8 @@ for (const width of [360,390,768,1024,1600]) test(`life book responsive ${width}
     await expect.poll(()=>page.locator('.living-ancestry-figure img').evaluate(e=>(e as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
     await page.evaluate(()=>window.scrollTo(0,0));
     await snapshot(page,info,'01-landing');
-    await page.locator('.forest-masthead').screenshot({path:resolve(`outputs/living-world-v2/after/hero-${width}.png`),animations:'disabled'});
-    await page.locator('.living-legacy').screenshot({path:resolve(`outputs/living-world-v2/after/tree-clock-${width}.png`),animations:'disabled'});
+    await page.locator('.forest-masthead').screenshot({path:resolve(`outputs/living-world-v3/after/hero-${width}.png`),animations:'disabled'});
+    await page.locator('.living-legacy').screenshot({path:resolve(`outputs/living-world-v3/after/tree-clock-${width}.png`),animations:'disabled'});
     await page.locator('.living-book-zone').screenshot({path:info.outputPath('02-closed-book.png')});
     await page.keyboard.press('Tab');
     expect(await page.evaluate(() => document.activeElement?.tagName)).not.toBe('BODY');

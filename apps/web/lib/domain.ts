@@ -135,6 +135,7 @@ export type InterviewQuestionCategory = 'gap' | 'contradiction' | 'meaning' | 'd
 
 /** The application, never the model, assigns the stable question id. */
 export interface InterviewQuestion {
+  disposition?: 'skipped';
   id: string;
   text: string;
   category: InterviewQuestionCategory;
@@ -265,6 +266,7 @@ export interface AITargetedPatch {
 
 /** Full proposed prose lives in a user-facing preview, not in the technical operation record. */
 export interface AIStoryPreview {
+  sourceSnapshot?: string;
   id: string;
   operationId: string;
   type: 'assembly' | 'rephrase' | 'patch';

@@ -7,11 +7,11 @@ for (const width of [360,390,768,1024]) test(`living leaf accessibility ${width}
     extraHTTPHeaders:{'oai-authenticated-user-id':`leaf-${crypto.randomUUID()}`},serviceWorkers:'block'});
   await context.route('**/*',route=>['127.0.0.1','localhost'].includes(new URL(route.request().url()).hostname)?route.continue():route.abort());
   const page=await context.newPage();
-  const out=resolve('outputs/living-world-v2/after');
+  const out=resolve('outputs/living-world-v3/after');
   try {
     await mkdir(out,{recursive:true});
     await page.goto('http://127.0.0.1:3100/');
-    await page.getByRole('button',{name:'Начать свою книгу',exact:true}).first().click();
+    await page.getByRole('button',{name:'Рассказать первую историю',exact:true}).first().click();
     await page.getByRole('button',{name:'Да, хочу рассказать',exact:true}).click();
     const input=page.getByLabel('Твоя история',{exact:true});
     await input.fill('Текст остаётся моим, даже когда меняется оформление.');

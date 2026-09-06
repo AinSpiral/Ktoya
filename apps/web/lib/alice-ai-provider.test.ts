@@ -25,6 +25,7 @@ describe('Alice AI adapter boundary', () => {
     const provider = new AliceAIProvider({ apiKey: 'hidden', folderId: 'folder', model: 'aliceai-llm' }, { db: dbWithReservation(), userId: 'qa-user', operationId: 'op-1' }, fetcher);
     await expect(provider.nextInterviewStep(context)).resolves.toMatchObject({ value: { decision: 'ASK' }, usage: { inputTokens: 120, outputTokens: 40 } });
     const request = JSON.parse(fetcher.mock.calls[0][1].body as string);
+    expect(fetcher.mock.calls[0][1].headers['x-data-logging-enabled']).toBe('false');
     expect(request.response_format).toMatchObject({ type: 'json_schema', json_schema: { strict: true } });
     expect(request.messages[0].content).toContain('двусмысленное слово');
     expect(JSON.stringify(request)).not.toContain('hidden');

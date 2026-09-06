@@ -10,6 +10,7 @@ export function captureTypedSourceId(draftId: string) {
 }
 
 function selectedCaptureText(item: CaptureDraftFragment) {
+  if (item.manuallyEdited) return item.transcript.trim();
   return [...(item.transcriptRevisions ?? [])].reverse().find((revision) => revision.selected)?.text.trim() || item.transcript.trim() || item.rawTranscript?.trim() || '';
 }
 
@@ -18,7 +19,7 @@ export function captureDraftSources(draft: CaptureDraft): AIStorySourceInput[] {
   if (draft.sourceText.trim()) sources.push({ id: captureTypedSourceId(draft.id), kind: 'typed', text: draft.sourceText.trim() });
   for (const item of draft.storyFragments) {
     const text = selectedCaptureText(item);
-    if (text) sources.push({ id: captureFragmentSourceId(item.fragment.id), kind: 'transcript', text });
+    if (text) sources.push({ id: captureFragmentSourceId(item.fragment.id), kind: 'transcript', text, transcriptStatus:item.fragment.recognitionStatus, authorEdited:Boolean(item.manuallyEdited), recordedAt:item.fragment.createdAt });
   }
   for (const answer of draft.interviewAnswers) {
     if (answer.answer.trim()) sources.push({ id: answer.id, kind: 'interview-answer', text: answer.answer.trim(), questionId: answer.questionId });
@@ -34,6 +35,7 @@ export function contextForCaptureDraft(draft: CaptureDraft): AIStoryContextInput
       questionId: question.id,
       question: question.text,
       category: question.category,
+      disposition: question.disposition,
       answer: draft.interviewAnswers.find((answer) => answer.questionId === question.id)?.answer,
     })),
     currentTitle: draft.assembledDraft?.title,

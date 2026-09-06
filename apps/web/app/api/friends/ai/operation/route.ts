@@ -2,6 +2,7 @@ import { env } from 'cloudflare:workers';
 import { NextRequest, NextResponse } from 'next/server';
 import { handleAIOperation } from '@/lib/ai-operation-handler';
 import { requestIdentity } from '@/lib/server-auth';
+import { friendsAIState } from '@/lib/semantic-availability';
 
 export async function POST(request: NextRequest) {
   const local = ['localhost', '127.0.0.1'].includes(request.nextUrl.hostname);
@@ -12,5 +13,6 @@ export async function POST(request: NextRequest) {
     userId: identity.userId,
     db: env.FRIENDS_DB,
     forceDeterministic: true,
+    allowSyntheticFixtures: friendsAIState(request.nextUrl.hostname, env as unknown as { KTOYA_SYNTHETIC_AI_FIXTURES?:string }).fixtureMode,
   });
 }

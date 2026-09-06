@@ -13,11 +13,12 @@ describe('AI story state transitions', () => {
   it('creates stable application questionId, rejects repeats and enforces eight-question emergency limit', () => {
     const base = draft();
     const result = { model: 'aliceai-llm', usage: { inputTokens: 10, outputTokens: 10 }, value: { decision: 'ASK' as const, question: 'Что могло стать причиной возгорания?', anchorQuote: 'бумажный кораблик.', category: 'detail' as const, purpose: 'Уточнить деталь', relatedSourceIds: [`source:typed:${base.id}`] } };
-    const first = appendInterviewDecision(base, 'op-1', 'yandex-ai-studio', result);
+    expect(() => appendInterviewDecision(base, 'op-unsafe', 'yandex-ai-studio', result)).toThrow('ungrounded');
+    const first = appendInterviewDecision(base, 'op-1', 'mock', result);
     expect(first.draft.interviewQuestions?.[0]).toMatchObject({ id: expect.any(String), operationId: 'op-1' });
     expect(first.draft.interviewQuestions?.[0].text).toBe('Ты упомянул «бумажный кораблик». Какую подробность здесь важно сохранить?');
     expect(first.draft.interviewQuestions?.[0].text).not.toContain('возгорания');
-    expect(() => appendInterviewDecision(first.draft, 'op-2', 'yandex-ai-studio', result)).toThrow('repeat');
+    expect(() => appendInterviewDecision(first.draft, 'op-2', 'mock', result)).toThrow('repeat');
     const limited = appendInterviewDecision({ ...base, interviewQuestions: Array.from({ length: 8 }, (_, index) => ({ id: `q-${index}`, text: `Вопрос ${index}`, category: 'gap' as const, purpose: 'QA', relatedSourceIds: [`source:typed:${base.id}`], createdAt: base.updatedAt, provider: 'mock', model: 'mock' })) }, 'op-limit', 'mock', result);
     expect(limited.decision.decision).toBe('READY');
   });

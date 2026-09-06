@@ -3,7 +3,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { createEmptyState } from '../lib/domain';
 
-const out = resolve('outputs/living-world-v2/after');
+const out = resolve('outputs/living-world-v3/after');
 for (const width of [360,390,768,1024,1600]) test(`living world shell ${width}: first choice, capture, feedback, reload, contrast and motion`, async ({ browser }) => {
   const context = await browser.newContext({ viewport:{width,height:width<600?844:1000}, reducedMotion:'reduce', serviceWorkers:'block',
     extraHTTPHeaders:{'oai-authenticated-user-id':`world-${crypto.randomUUID()}`} });
@@ -22,7 +22,7 @@ for (const width of [360,390,768,1024,1600]) test(`living world shell ${width}: 
   try {
     await mkdir(out,{recursive:true});
     await page.goto('http://127.0.0.1:3100/');
-    await page.getByRole('button',{name:'Начать свою книгу',exact:true}).first().click();
+    await page.getByRole('button',{name:'Рассказать первую историю',exact:true}).first().click();
     await page.screenshot({path:resolve(out,`first-choice-${width}.png`),fullPage:true,animations:'disabled'});
     await page.getByRole('button',{name:'Да, хочу рассказать',exact:true}).click();
     await expect(page.locator('.writing-stage')).toBeVisible();
@@ -52,16 +52,7 @@ for (const width of [360,390,768,1024,1600]) test(`living world shell ${width}: 
     await expect(dialog).toBeVisible();
     expect(await dialog.evaluate(e=>e.scrollWidth<=e.clientWidth)).toBe(true);
     await page.screenshot({path:resolve(out,`feedback-${width}.png`),animations:'disabled'});
-    if (width===390) {
-      // Baseline component styling, same unchanged dialog DOM; no background is included.
-      const disabled=await page.evaluate(()=>{
-        const sheets=[...document.styleSheets].filter(s=>/living-(interior|pages)\.css$/.test((s.ownerNode as HTMLElement)?.getAttribute('data-vite-dev-id')||''));
-        if(sheets.length!==2)return false; for(const sheet of sheets)sheet.disabled=true;return true;
-      });
-      expect(disabled).toBe(true);
-      await dialog.screenshot({path:resolve('outputs/living-world-v2/before/feedback-component-390.png'),animations:'disabled'});
-      await page.evaluate(()=>{for(const s of document.styleSheets)s.disabled=false;});
-    }
+    // V2 before evidence was copied before source edits; never recreate it from V3 styles.
     await page.keyboard.press('Escape');
     await expect(dialog).not.toBeVisible();
     expect(external).toEqual([]);expect(errors).toEqual([]);
@@ -70,15 +61,15 @@ for (const width of [360,390,768,1024,1600]) test(`living world shell ${width}: 
 
 test('quiet interior asset failure preserves paper, keyboard and capture', async ({browser})=>{
   const context=await browser.newContext({viewport:{width:390,height:844},extraHTTPHeaders:{'oai-authenticated-user-id':`world-failure-${crypto.randomUUID()}`}});
-  await context.route('**/art/living-world-v2/forest-writing-*',route=>route.fulfill({status:200,contentType:'image/webp',body:'invalid fixture'}));
+  await context.route('**/art/living-world-v3/forest-writing-*',route=>route.fulfill({status:200,contentType:'image/webp',body:'invalid fixture'}));
   const page=await context.newPage();
   try {
     await page.goto('http://127.0.0.1:3100/');
-    await page.getByRole('button',{name:'Начать свою книгу',exact:true}).first().click();
+    await page.getByRole('button',{name:'Рассказать первую историю',exact:true}).first().click();
     await page.getByRole('button',{name:'Да, хочу рассказать',exact:true}).click();
     await page.getByLabel('Твоя история',{exact:true}).fill('История остаётся доступна без картинки.');
     await expect(page.getByRole('button',{name:'Уточняющие вопросы',exact:true})).toBeEnabled();
-    expect(await page.locator('.flow-shell').evaluate(e=>getComputedStyle(e).backgroundColor)).toBe('rgb(30, 44, 32)');
+    expect(await page.locator('.flow-shell').evaluate(e=>getComputedStyle(e).backgroundColor)).toBe('rgb(23, 37, 27)');
     await page.screenshot({path:resolve(out,'interior-image-fallback-390.png'),fullPage:true,animations:'disabled'});
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   } finally {await context.close();}

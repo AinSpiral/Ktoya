@@ -12,6 +12,7 @@
     { "binding": "FRIENDS_AUDIO", "bucket_name": "ktoya-friends-local-e2e-audio" }
   ],
   "vars": {
+    "KTOYA_SYNTHETIC_AI_FIXTURES": "true",
     "FRIENDS_BETA_MODE": "true",
     "FRIENDS_ACCESS_CODE": "e2e-friend-access",
     "OWNER_ACCESS_CODE": "e2e-owner-access",

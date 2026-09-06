@@ -184,7 +184,7 @@ async function assertHeroIsUsable(page: Page) {
   expect(pointerEvents).toEqual(['none', 'none']);
 
   const heading = masthead.locator('.hero h1');
-  const cta = masthead.getByRole('button', { name: 'Начать свою книгу' });
+  const cta = masthead.getByRole('button', { name: 'Рассказать первую историю' });
   await expect(heading).toBeVisible();
   await expect(heading).toBeInViewport();
   await expect(cta).toBeVisible();
@@ -281,7 +281,7 @@ async function assertHeroIsUsable(page: Page) {
 }
 
 async function assertPrimaryButtonHoverState(page: Page) {
-  const cta = page.locator('.forest-masthead').getByRole('button', { name: 'Начать свою книгу' });
+  const cta = page.locator('.forest-masthead').getByRole('button', { name: 'Рассказать первую историю' });
   const visualState = () => cta.evaluate((element) => {
     const style = getComputedStyle(element);
     return JSON.stringify({
@@ -306,7 +306,7 @@ async function assertPrimaryButtonHoverState(page: Page) {
 }
 
 async function assertVisibleKeyboardFocus(page: Page) {
-  const cta = page.locator('.forest-masthead').getByRole('button', { name: 'Начать свою книгу' });
+  const cta = page.locator('.forest-masthead').getByRole('button', { name: 'Рассказать первую историю' });
   for (let attempt = 0; attempt < 12; attempt += 1) {
     await page.keyboard.press('Tab');
     if (await cta.evaluate((element) => document.activeElement === element)) break;
@@ -335,7 +335,7 @@ async function readParallax(page: Page) {
 }
 
 async function exerciseStoryEntryAndReturn(page: Page, width: number) {
-  await page.locator('.forest-masthead').getByRole('button', { name: 'Начать свою книгу' }).click();
+  await page.locator('.forest-masthead').getByRole('button', { name: 'Рассказать первую историю' }).click();
   await expect(page.getByRole('heading', { name: 'У тебя уже есть история, которую хочется рассказать?' })).toBeVisible();
   await page.getByRole('button', { name: 'Да, хочу рассказать' }).click();
   await expect(page.getByRole('textbox', { name: 'Твоя история', exact: true })).toBeVisible();
@@ -355,7 +355,7 @@ async function exerciseStoryEntryAndReturn(page: Page, width: number) {
   await page.getByRole('button', { name: 'Назад' }).click();
   await expect(page.getByRole('button', { name: 'Да, хочу рассказать' })).toBeVisible();
   await page.getByRole('button', { name: 'Назад' }).click();
-  await expect(page.locator('.forest-masthead').getByRole('button', { name: 'Начать свою книгу' })).toBeVisible();
+  await expect(page.locator('.forest-masthead').getByRole('button', { name: 'Рассказать первую историю' })).toBeVisible();
   await expect(page).toHaveURL(/#landing$/);
   await page.reload({ waitUntil: 'networkidle' });
   await expect(page.locator('.forest-masthead')).toBeVisible();
@@ -498,11 +498,11 @@ test('art loading reserves geometry and preload selects only the matching forest
     await page.goto('/#landing', { waitUntil: 'domcontentloaded' });
     await page.evaluate(() => document.fonts.ready);
     const before = await page.locator('.living-book-zone').boundingBox();
-    const ctaBefore = await page.locator('.forest-masthead').getByRole('button', { name: 'Начать свою книгу' }).boundingBox();
+    const ctaBefore = await page.locator('.forest-masthead').getByRole('button', { name: 'Рассказать первую историю' }).boundingBox();
     release();
     await expect(page.locator('.living-world-forest')).toHaveAttribute('data-ready', 'true');
     const after = await page.locator('.living-book-zone').boundingBox();
-    const ctaAfter = await page.locator('.forest-masthead').getByRole('button', { name: 'Начать свою книгу' }).boundingBox();
+    const ctaAfter = await page.locator('.forest-masthead').getByRole('button', { name: 'Рассказать первую историю' }).boundingBox();
     expect(after).toEqual(before);
     expect(ctaAfter).toEqual(ctaBefore);
     const resources = await page.evaluate(() => performance.getEntriesByType('resource').map(entry => entry.name));
