@@ -8,6 +8,6 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({
     id: identity.userId,
     email: '',
-    name: identity.source === 'friends' ? 'Друг КтоЯ' : 'Тестовый автор',
+    name: identity.accountId === 'ilya' ? 'Илья' : identity.source === 'friends' ? 'Друг КтоЯ' : 'Тестовый автор',
   }, { headers: { 'cache-control': 'private, no-store' } });
 }

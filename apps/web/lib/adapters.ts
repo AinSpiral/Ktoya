@@ -213,6 +213,17 @@ export class HttpVoiceProcessingAdapter {
     return this.post('/api/friends/voice/transcription', { captureDraftId, audioFragmentId, ...(processingMode === 'faithful' ? {} : { processingMode }) });
   }
 
+  async liveVoiceTurn(captureDraftId: string, audioFragmentId: string) {
+    const response = await fetch('/api/friends/live/voice-turn', {
+      method: 'POST',
+      headers: this.headers('application/json'),
+      body: JSON.stringify({ operationId: crypto.randomUUID(), captureDraftId, audioFragmentId, consentVersion: 'external-yandex-v1' }),
+    });
+    const detail = await response.json().catch(() => null) as ({ message?: string } & LiveVoiceTurnResult) | null;
+    if (!response.ok) throw new Error(detail?.message ?? 'Живой голосовой ответ не завершён. Оригинал сохранён.');
+    return detail as LiveVoiceTurnResult;
+  }
+
   async narrate(storyId: string, voiceId?: string): Promise<AppState> {
     return this.post('/api/friends/voice/narration', { storyId, ...(voiceId ? { voiceId } : {}) });
   }
@@ -234,9 +245,24 @@ export interface AIProviderCapabilities {
   mode: 'deterministic' | 'connected';
   provider: string;
   model: string;
-  trialQaOnly: true;
+  trialQaOnly: boolean;
+  consentRequired?: boolean;
+  budget?: { capRub: number; committedRub: number; remainingRub: number };
   message: string;
 }
+
+export type LiveVoiceTurnResult = {
+  state: AppState;
+  provider: string;
+  model: string;
+  transcript: string;
+  assistantText: string;
+  assistantAudioBase64?: string;
+  assistantAudioContentType?: string;
+  decision: { decision: 'ASK'; questionId: string; question: string; purpose: string } | { decision: 'READY'; reason: string };
+  actualCostRub: number;
+  budget: { capRub: number; committedRub: number; remainingRub: number };
+};
 
 export type AIClientResult = {
   state: AppState;

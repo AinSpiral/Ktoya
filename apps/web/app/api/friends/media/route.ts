@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { FeedbackSubmissionError, reserveClassBOperation, saveSessionMedia } from '@/lib/feedback-store';
 import { FRIENDS_BETA_LIMITS } from '@/lib/friends-limits';
 import { ensureLocalFriendsSchema } from '@/lib/friends-schema';
-import { requestIdentity } from '@/lib/server-auth';
+import { identityStorageOwner, requestIdentity } from '@/lib/server-auth';
 
 const isLocal = (request: NextRequest) => ['localhost', '127.0.0.1'].includes(request.nextUrl.hostname);
 const validId = (value: string | null) => Boolean(value && /^[a-zA-Z0-9_-]{8,128}$/.test(value));
@@ -35,7 +35,8 @@ export async function PUT(request: NextRequest) {
   if (!suffix) return NextResponse.json({ error: 'unsupported_audio_type' }, { status: 415 });
   const declaredLength = Number(request.headers.get('content-length') ?? 0);
   if (declaredLength > FRIENDS_BETA_LIMITS.singleAudioBytes) return NextResponse.json({ error: 'audio_too_large' }, { status: 413 });
-  const prefix = `friends/${safeSession(identity.sessionId)}/stories/${storyId}`;
+  const storageOwner = identityStorageOwner(identity);
+  const prefix = `friends/${safeSession(storageOwner)}/stories/${storyId}`;
   const objectKey = derived
     ? `${prefix}/derived/${fragmentId}/${assetId}.${suffix}`
     : `${prefix}/${fragmentId}.${suffix}`;
@@ -43,7 +44,7 @@ export async function PUT(request: NextRequest) {
     const result = await saveSessionMedia({
       db: env.FRIENDS_DB,
       bucket: env.FRIENDS_AUDIO,
-      sessionId: identity.sessionId,
+      sessionId: storageOwner,
       objectKey,
       bytes: await request.arrayBuffer(),
       declaredMime: contentType,
@@ -60,7 +61,7 @@ export async function GET(request: NextRequest) {
   const identity = await requestIdentity(request, env, isLocal(request));
   if (!identity || identity.role !== 'tester') return NextResponse.json({ error: 'tester_session_required' }, { status: 401 });
   const key = request.nextUrl.searchParams.get('key');
-  const prefix = `friends/${safeSession(identity.sessionId)}/stories/`;
+  const prefix = `friends/${safeSession(identityStorageOwner(identity))}/stories/`;
   if (!key || !key.startsWith(prefix)) return new NextResponse(null, { status: 403 });
   try { await reserveClassBOperation(env.FRIENDS_DB); }
   catch (error) {

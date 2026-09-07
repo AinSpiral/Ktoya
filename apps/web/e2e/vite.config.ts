@@ -15,7 +15,7 @@ export default defineConfig(async () => {
     plugins: [vinext(), cloudflare({
       configPath: fileURLToPath(new URL('./wrangler.json', import.meta.url)),
       viteEnvironment: { name: 'rsc', childEnvironments: ['ssr'] },
-      persistState: { path: fileURLToPath(new URL('./.generated/state', import.meta.url)) },
+      persistState: { path: process.env.KTOYA_E2E_PERSIST_PATH ?? fileURLToPath(new URL('./.generated/state', import.meta.url)) },
       remoteBindings: false,
       inspectorPort: false,
     })],

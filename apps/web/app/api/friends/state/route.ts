@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import type { AppState } from '@/lib/domain';
 import { recoverPendingCaptureDraftMedia } from '@/lib/draft-media-recovery';
 import { loadAuthorState, saveAuthorState, StateConflictError } from '@/lib/server-state';
-import { requestIdentity } from '@/lib/server-auth';
+import { identityStorageOwner, requestIdentity } from '@/lib/server-auth';
 import { FeedbackSubmissionError, hasMeteredR2Object } from '@/lib/feedback-store';
 import { countPendingMediaReferences, FRIENDS_STATE_LIMITS, utf8ByteLength } from '@/lib/friends-state-limits';
 
@@ -22,7 +22,7 @@ async function recoverMetered(state: AppState, identity: NonNullable<Awaited<Ret
     state,
     identity.userId,
     (key) => hasMeteredR2Object(env.FRIENDS_DB, env.FRIENDS_AUDIO, key),
-    friendsMediaKey(identity.sessionId),
+    friendsMediaKey(identityStorageOwner(identity)),
   );
 }
 

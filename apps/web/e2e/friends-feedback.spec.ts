@@ -104,6 +104,7 @@ test('voice feedback: fake mic, re-record, 10-second upload, reload, owner playb
 test('text fallback, idempotence, CSRF, and Tester A / Tester B isolation', async () => {
   const a = await friendContext();
   const b = await friendContext();
+  let sameAccount: Awaited<ReturnType<typeof friendContext>> | null = null;
   let owner: Awaited<ReturnType<typeof ownerContext>> | null = null;
   try {
     await login(a.page);
@@ -146,16 +147,22 @@ test('text fallback, idempotence, CSRF, and Tester A / Tester B isolation', asyn
     await a.page.getByLabel('Твоя история', { exact: true }).fill('Отдельная история Tester A.');
     await expect.poll(async () => a.page.evaluate(async () => (await fetch('/api/friends/state')).status)).toBe(200);
 
-    await login(b.page);
+    await login(b.page, 'e2e-friend-b-access');
     await expect(b.page.getByText('Отдельная история Tester A.')).toHaveCount(0);
     const bState = await b.page.evaluate(async () => (await fetch('/api/friends/state')).status);
     expect(bState).toBe(404);
+
+    sameAccount = await friendContext();
+    await login(sameAccount.page);
+    const restored = await sameAccount.page.evaluate(async () => (await fetch('/api/friends/state')).text());
+    expect(restored).toContain('Отдельная история Tester A.');
 
     owner = await ownerContext();
     await expect(owner.page.getByText(idempotenceMarker, { exact: true })).toHaveCount(1);
     await expect(owner.page.getByText(fallbackMarker, { exact: true })).toHaveCount(1);
   } finally {
     await owner?.browser.close();
+    await sameAccount?.browser.close();
     await a.browser.close();
     await b.browser.close();
   }

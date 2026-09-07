@@ -61,13 +61,13 @@ export function FriendsAccessGate({ children }: { children: React.ReactNode }) {
       <Link className="wordmark" href="/" aria-label="КтоЯ — на главную">КтоЯ<span>.</span></Link>
       <p className="eyebrow">Закрытая Friends Beta</p>
       <h1>Твоя жизнь заслуживает книги</h1>
-      <p>Введите код из приглашения. У каждого устройства будет отдельная тестовая книга и отдельная сессия.</p>
+      <p>Введите личный код из приглашения. Он открывает только вашу тестовую книгу; повторный вход с тем же кодом возвращает к ней.</p>
       <form onSubmit={login}>
         <label>Код доступа<input autoComplete="one-time-code" autoFocus value={code} onChange={(event) => setCode(event.target.value)} /></label>
         {error && <p className="error-text" role="alert">{error}</p>}
         <button className="button-primary" disabled={busy || !code.trim()}>{busy ? 'Проверяем…' : 'Войти в Friends Beta'}</button>
       </form>
-      <p className="access-privacy">Голосовые материалы не передаются внешнему AI или STT. Для владельца есть <a href="/feedback-inbox">отдельный вход</a>.</p>
+      <p className="access-privacy">Голос и текст отправляются в Yandex AI Studio только после отдельного понятного согласия внутри истории. Это закрытая техническая Beta, не юридически готовый публичный сервис. Для владельца есть <a href="/feedback-inbox">отдельный вход</a>.</p>
     </section>
   </main>;
   if (session.role === 'owner') return <main className="friends-access-page"><section className="access-card"><p className="eyebrow">Режим владельца</p><h1>Отзывы Friends Beta</h1><p>Книга тестировщика в owner-сессии недоступна — роли изолированы.</p><a className="button-primary" href="/feedback-inbox">Открыть feedback inbox</a><button className="text-button" type="button" onClick={() => void logout()}>Выйти</button></section></main>;

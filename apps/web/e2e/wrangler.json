@@ -14,7 +14,7 @@
   "vars": {
     "KTOYA_SYNTHETIC_AI_FIXTURES": "true",
     "FRIENDS_BETA_MODE": "true",
-    "FRIENDS_ACCESS_CODE": "e2e-friend-access",
+    "FRIENDS_TESTER_ACCESS_CODES": "{\"ilya\":\"e2e-friend-access\",\"friend_1\":\"e2e-friend-b-access\",\"friend_2\":\"e2e-friend-c-access\"}",
     "OWNER_ACCESS_CODE": "e2e-owner-access",
     "FRIENDS_SESSION_SECRET": "e2e-only-session-secret-not-for-deployment",
     "FRIENDS_BUILD_ID": "local-e2e"

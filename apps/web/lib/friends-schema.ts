@@ -9,6 +9,7 @@ const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS friends_sessions (
     session_id TEXT PRIMARY KEY,
     role TEXT NOT NULL CHECK (role IN ('tester', 'owner')),
+    account_id TEXT,
     created_at TEXT NOT NULL,
     expires_at TEXT NOT NULL
   )`,
@@ -67,6 +68,10 @@ const SCHEMA = [
 export async function ensureLocalFriendsSchema(db: D1Database, allowLocalInitialization: boolean) {
   if (!allowLocalInitialization) return;
   await db.batch(SCHEMA.map((statement) => db.prepare(statement)));
+  const columns = await db.prepare('PRAGMA table_info(friends_sessions)').all<{ name: string }>();
+  if (!(columns.results ?? []).some((column) => column.name === 'account_id')) {
+    try { await db.prepare('ALTER TABLE friends_sessions ADD COLUMN account_id TEXT').run(); } catch { /* concurrent local initialization */ }
+  }
   const now = new Date().toISOString();
   await db.prepare(`INSERT OR IGNORE INTO friends_feedback_usage
     (scope, total_audio_bytes, reserved_audio_bytes, month_key, class_a_operations, class_b_operations, updated_at)

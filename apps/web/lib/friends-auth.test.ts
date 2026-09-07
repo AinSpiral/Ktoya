@@ -3,7 +3,9 @@ import {
   clearSessionCookies,
   createFriendsSession,
   csrfCookie,
+  matchTesterAccount,
   sessionCookie,
+  testerAccounts,
   validCsrf,
   verifyFriendsSession,
 } from './friends-auth';
@@ -17,7 +19,8 @@ describe('Friends Beta signed sessions', () => {
     const created = await createFriendsSession('tester', secret, now);
     expect(created.ttl).toBe(FRIENDS_BETA_LIMITS.testerSessionTtlSeconds);
     await expect(verifyFriendsSession(created.token, secret, now + 1_000)).resolves.toEqual(created.payload);
-    const tampered = `${created.token.slice(0, -1)}${created.token.endsWith('a') ? 'b' : 'a'}`;
+    const separator = created.token.indexOf('.') + 1;
+    const tampered = `${created.token.slice(0, separator)}${created.token[separator] === 'a' ? 'b' : 'a'}${created.token.slice(separator + 1)}`;
     await expect(verifyFriendsSession(tampered, secret, now + 1_000)).resolves.toBeNull();
   });
 
@@ -44,5 +47,18 @@ describe('Friends Beta signed sessions', () => {
     expect(csrfCookie(created.payload.csrf, created.ttl)).toContain('Secure; SameSite=Strict');
     expect(clearSessionCookies()).toHaveLength(2);
     expect(clearSessionCookies().every((value) => value.includes('Max-Age=0'))).toBe(true);
+  });
+
+  it('maps each personal invite code to a stable account without exposing another account', async () => {
+    const accounts = JSON.stringify({ ilya: 'ilya-personal-code-123', friend_1: 'friend-one-code-456', friend_2: 'friend-two-code-789' });
+    expect(testerAccounts(accounts).map((item) => item.accountId)).toEqual(['ilya', 'friend_1', 'friend_2']);
+    await expect(matchTesterAccount('friend-one-code-456', accounts, secret)).resolves.toBe('friend_1');
+    await expect(matchTesterAccount('friend-two-code-789', accounts, secret)).resolves.toBe('friend_2');
+    await expect(matchTesterAccount('wrong-personal-code', accounts, secret)).resolves.toBeNull();
+  });
+
+  it('fails closed unless there are exactly three or four valid invited accounts', () => {
+    expect(testerAccounts(JSON.stringify({ ilya: 'ilya-personal-code-123', friend_1: 'friend-one-code-456' }))).toEqual([]);
+    expect(testerAccounts(JSON.stringify({ ilya: 'short', friend_1: 'friend-one-code-456', friend_2: 'friend-two-code-789' }))).toEqual([]);
   });
 });

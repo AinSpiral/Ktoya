@@ -11,6 +11,10 @@ import { contextForCaptureDraft, contextForStory } from './ai-story-context';
 import { authenticatedUserId } from './server-auth';
 import { loadAuthorState, saveAuthorState, StateConflictError } from './server-state';
 import { isNarrativeStyle } from './story-styles';
+import { completeLiveBetaOperation, estimateTextOperationMaxRub, failLiveBetaOperation, findLiveBetaOperation, liveBetaCostRub, noteLiveBetaProviderCall, reserveLiveBetaOperation } from './live-beta-budget';
+import { readLiveBetaConfig, type LiveBetaConfig } from './live-beta-config';
+import { hasFinalRealtimeBilling, YandexRealtimeAIProvider, YandexRealtimeError } from './yandex-realtime-provider';
+import { LIVE_BETA_CONSENT_VERSION } from './live-beta-config';
 
 type GenerateBody = {
   action: AIOperationKind;
@@ -77,7 +81,7 @@ async function reserveConnected(input: { config: AliceTrialConfig; provider: Ali
 export async function handleAIOperation(
   request: NextRequest,
   runtimeEnv: Cloudflare.Env,
-  options?: { userId?: string; db?: D1Database; forceDeterministic?: boolean; allowSyntheticFixtures?: boolean },
+  options?: { userId?: string; db?: D1Database; forceDeterministic?: boolean; allowSyntheticFixtures?: boolean; liveBeta?: boolean },
 ) {
   const userId = options?.userId ?? authenticatedUserId(request.headers, request.nextUrl.hostname === 'localhost' || request.nextUrl.hostname === '127.0.0.1');
   if (!userId) return NextResponse.json({ error: 'authentication_required' }, { status: 401 });
@@ -89,6 +93,9 @@ export async function handleAIOperation(
   }
   let reservedConnectedOperationId: string | null = null;
   let reservedConfig: AliceTrialConfig | null = null;
+  let reservedLiveOperationId: string | null = null;
+  let reservedLiveConfig: LiveBetaConfig | null = null;
+  let liveProviderCalled = false;
   let providerUsage: { inputTokens: number; outputTokens: number } | null = null;
   try {
     let state = await loadAuthorState(db, userId);
@@ -101,7 +108,7 @@ export async function handleAIOperation(
 
     const existingResult = findExistingResult(state, generate);
     if (existingResult) {
-      const operation = await findAiOperation(db, generate.operationId, userId);
+      const operation = options?.liveBeta ? await findLiveBetaOperation(db, generate.operationId) : await findAiOperation(db, generate.operationId, userId);
       return NextResponse.json({
         ...existingResult,
         provider: operation?.provider,
@@ -123,12 +130,27 @@ export async function handleAIOperation(
     if (!context.sources.length) return NextResponse.json({ error: 'confirmed_sources_required' }, { status: 409 });
     if (body.action === 'interview-next' && (draft!.interviewQuestions?.length ?? 0) >= 8) return NextResponse.json({ state, decision: { decision: 'READY', reason: 'Достигнут аварийный предел восьми вопросов.' } });
 
-    const config = options?.forceDeterministic ? null : readAliceTrialConfig(runtimeEnv);
-    const connected = !options?.forceDeterministic && canUseAliceTrial(config, owner.externalProcessingPolicy, userId, request.nextUrl.hostname);
-    const provider: AIProvider = connected
-      ? new AliceAIProvider(config!, { db, userId, operationId: body.operationId })
-      : new DeterministicAIProvider();
+    const liveConfig = options?.liveBeta ? readLiveBetaConfig(runtimeEnv) : null;
+    if (options?.liveBeta && !liveConfig) return NextResponse.json({ error: 'live_beta_not_configured', message: 'Живой ИИ временно выключен: защищённая конфигурация не прошла проверку.' }, { status: 503 });
+    if (options?.liveBeta && owner.externalProcessingPolicy !== 'user-content-approved') return NextResponse.json({ error: 'consent_required', message: 'Перед отправкой текста нужно подтвердить внешнюю обработку Yandex AI Studio.' }, { status: 403 });
+    const config = options?.forceDeterministic || options?.liveBeta ? null : readAliceTrialConfig(runtimeEnv);
+    const connected = options?.liveBeta ? Boolean(liveConfig) : !options?.forceDeterministic && canUseAliceTrial(config, owner.externalProcessingPolicy, userId, request.nextUrl.hostname);
+    const provider: AIProvider = options?.liveBeta
+      ? new YandexRealtimeAIProvider(liveConfig!, { db, userId, operationId: body.operationId })
+      : connected ? new AliceAIProvider(config!, { db, userId, operationId: body.operationId }) : new DeterministicAIProvider();
     if (connected) {
+      if (options?.liveBeta) {
+        const previous = await findLiveBetaOperation(db, body.operationId);
+        if (previous) return NextResponse.json({ error: 'ai_operation_already_reserved', status: previous.status, message: 'Этот платный вызов уже учтён и автоматически не повторяется.' }, { status: 409 });
+        const reservation = await reserveLiveBetaOperation({
+          db, operationId: body.operationId, userId, kind: body.action, model: liveConfig!.model,
+          sourceId: body.storyId ?? body.captureDraftId, consentVersion: LIVE_BETA_CONSENT_VERSION,
+          maxCostRub: estimateTextOperationMaxRub(JSON.stringify(context).length + 5_000, maxOutputTokens(body.action), liveConfig!),
+        });
+        if (!reservation.claimed) throw new Error(reservation.blockedByUnresolved ? 'LIVE_BETA_RETRY_BLOCKED' : 'LIVE_BETA_BUDGET_EXHAUSTED');
+        reservedLiveOperationId = body.operationId;
+        reservedLiveConfig = liveConfig;
+      } else {
       const previousOperation = await findAiOperation(db, body.operationId, userId);
       if (previousOperation) {
         return NextResponse.json({
@@ -146,16 +168,22 @@ export async function handleAIOperation(
       await reserveConnected({ config: config!, provider: provider as AliceAIProvider, db, userId, body: generate, contextJson: JSON.stringify(context), sourceIds: context.sources.map((source) => source.id), baseRevisionId: context.currentRevisionId });
       reservedConnectedOperationId = body.operationId;
       reservedConfig = config;
+      }
     }
 
     let result: AIProviderResult<unknown>;
     try {
+      if (reservedLiveOperationId) {
+        await noteLiveBetaProviderCall(db, reservedLiveOperationId);
+        liveProviderCalled = true;
+      }
       if (body.action === 'interview-next') result = await provider.nextInterviewStep(context);
       else if (body.action === 'assembly') result = await provider.assemble(context);
       else if (body.action === 'rephrase') result = await provider.rephrase(context);
       else result = await provider.patch(context, { expectedOldText: generate.expectedOldText!, instruction: generate.instruction! });
     } catch (error) {
       if (error instanceof AliceAIProviderError && error.usage) providerUsage = error.usage;
+      if (error instanceof YandexRealtimeError && hasFinalRealtimeBilling(error) && error.usage) providerUsage = { inputTokens: error.usage.inputTokens ?? 0, outputTokens: error.usage.outputTokens ?? 0 };
       throw error;
     }
     providerUsage = result.usage;
@@ -183,13 +211,36 @@ export async function handleAIOperation(
       if (story) state = await saveStory(db, userId, state, { ...story, aiPreviews: [...(story.aiPreviews ?? []), preview], updatedAt: preview.createdAt });
       else state = await saveDraft(db, userId, state, { ...draft!, aiPreviews: [...(draft!.aiPreviews ?? []), preview], assembledDraft: { ...storyTarget!, aiPreviews: [...(storyTarget!.aiPreviews ?? []), preview] }, updatedAt: preview.createdAt });
     }
-    const actualCost = connected ? actualAiCostRub(result.usage.inputTokens, result.usage.outputTokens, config!) : 0;
+    const actualCost = options?.liveBeta && reservedLiveConfig
+      ? liveBetaCostRub({ inputTokens: result.usage.inputTokens, outputTokens: result.usage.outputTokens }, reservedLiveConfig)
+      : connected ? actualAiCostRub(result.usage.inputTokens, result.usage.outputTokens, config!) : 0;
+    if (reservedLiveOperationId && reservedLiveConfig) {
+      await completeLiveBetaOperation({
+        db,
+        operationId: reservedLiveOperationId,
+        actualCostRub: actualCost,
+        usage: { inputTokens: result.usage.inputTokens, outputTokens: result.usage.outputTokens },
+        providerSessionId: (provider as YandexRealtimeAIProvider).lastProviderSessionId,
+      });
+      reservedLiveOperationId = null;
+    }
     if (connected) {
-      await completeAiOperation({ db, operationId: body.operationId, inputTokens: result.usage.inputTokens, outputTokens: result.usage.outputTokens, actualCostRub: actualCost, previewId: preview?.id ?? `question:${body.operationId}` });
-      reservedConnectedOperationId = null;
+      if (!options?.liveBeta) {
+        await completeAiOperation({ db, operationId: body.operationId, inputTokens: result.usage.inputTokens, outputTokens: result.usage.outputTokens, actualCostRub: actualCost, previewId: preview?.id ?? `question:${body.operationId}` });
+        reservedConnectedOperationId = null;
+      }
     }
     return NextResponse.json({ state, provider: provider.id, mode: provider.mode, model: result.model, usage: result.usage, actualCostRub: actualCost, ...(decision ? { decision } : { preview }) });
   } catch (error) {
+    if (reservedLiveOperationId) {
+      try {
+        const realtime = error instanceof YandexRealtimeError ? error : null;
+        const billingFinal = realtime ? hasFinalRealtimeBilling(realtime) : Boolean(providerUsage);
+        const usage = realtime && billingFinal ? realtime.usage : providerUsage ? { inputTokens: providerUsage.inputTokens, outputTokens: providerUsage.outputTokens } : undefined;
+        const actualCostRub = usage && reservedLiveConfig ? liveBetaCostRub(usage, reservedLiveConfig) : undefined;
+        await failLiveBetaOperation({ db, operationId: reservedLiveOperationId, errorCode: realtime?.code ?? safeFailureCode(error), uncertain: liveProviderCalled && !billingFinal, actualCostRub, usage, providerSessionId: realtime?.providerSessionId });
+      } catch { /* The reservation remains a conservative hard-cap hold. */ }
+    }
     if (reservedConnectedOperationId) {
       try {
         const failureCode = safeFailureCode(error);
@@ -201,6 +252,8 @@ export async function handleAIOperation(
     const code = error instanceof Error ? error.message : 'ai_operation_failed';
     if (code === 'AI_OPERATION_UNCERTAIN' || code === 'AI_OPERATION_ALREADY_RESERVED') return NextResponse.json({ error: code.toLowerCase(), message: 'Исход предыдущего платного вызова нельзя подтвердить. Автоматический повтор заблокирован.' }, { status: 409 });
     if (code === 'AI_BUDGET_EXHAUSTED') return NextResponse.json({ error: 'ai_budget_exhausted', message: 'Рабочий лимит AI trial 60 ₽ исчерпан. Новый вызов не выполнен.' }, { status: 402 });
+    if (code === 'LIVE_BETA_BUDGET_EXHAUSTED') return NextResponse.json({ error: 'live_beta_budget_exhausted', message: 'Жёсткий лимит Closed Beta 100 ₽ не позволяет начать новый вызов.' }, { status: 402 });
+    if (code === 'LIVE_BETA_RETRY_BLOCKED') return NextResponse.json({ error: 'live_beta_retry_blocked', message: 'Предыдущий вызов для этого материала имеет незавершённый или неоднозначный исход. Новый платный вызов заблокирован.' }, { status: 409 });
     return NextResponse.json({ error: 'ai_operation_failed', failureCode: safeFailureCode(error), message: 'AI-предложение не создано. Исходный материал и все версии сохранены; платный вызов не повторяется автоматически.' }, { status: 502 });
   }
 }

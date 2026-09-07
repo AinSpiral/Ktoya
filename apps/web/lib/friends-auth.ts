@@ -4,6 +4,7 @@ export type FriendsRole = 'tester' | 'owner';
 export type FriendsSession = {
   sid: string;
   role: FriendsRole;
+  accountId?: string;
   csrf: string;
   exp: number;
 };
@@ -40,11 +41,12 @@ export async function secretMatches(actual: string, expected: string, signingSec
   return equalBytes(left, right);
 }
 
-export async function createFriendsSession(role: FriendsRole, secret: string, now = Date.now()) {
+export async function createFriendsSession(role: FriendsRole, secret: string, now = Date.now(), accountId?: string) {
   const ttl = role === 'owner' ? FRIENDS_BETA_LIMITS.ownerSessionTtlSeconds : FRIENDS_BETA_LIMITS.testerSessionTtlSeconds;
   const payload: FriendsSession = {
     sid: crypto.randomUUID(),
     role,
+    ...(role === 'tester' && accountId ? { accountId } : {}),
     csrf: base64url(crypto.getRandomValues(new Uint8Array(24))),
     exp: now + ttl * 1_000,
   };
@@ -64,10 +66,28 @@ export async function verifyFriendsSession(token: string | null, secret: string 
   try {
     const payload = JSON.parse(new TextDecoder().decode(fromBase64url(encoded))) as FriendsSession;
     if (!payload.sid || !/^[0-9a-f-]{36}$/i.test(payload.sid) || !['tester', 'owner'].includes(payload.role) || !payload.csrf || payload.exp <= now) return null;
+    if (payload.accountId && !/^[a-z0-9][a-z0-9_-]{1,31}$/.test(payload.accountId)) return null;
     return payload;
   } catch {
     return null;
   }
+}
+
+export function testerAccounts(value: string | undefined) {
+  if (!value) return [] as Array<{ accountId: string; code: string }>;
+  try {
+    const decoded = JSON.parse(value) as Record<string, unknown>;
+    const entries = Object.entries(decoded).filter(([accountId, code]) => /^[a-z0-9][a-z0-9_-]{1,31}$/.test(accountId) && typeof code === 'string' && code.length >= 12 && code.length <= 128)
+      .map(([accountId, code]) => ({ accountId, code: code as string }));
+    return entries.length >= 3 && entries.length <= 4 ? entries : [];
+  } catch { return [] as Array<{ accountId: string; code: string }>; }
+}
+
+export async function matchTesterAccount(code: string, encodedAccounts: string | undefined, signingSecret: string) {
+  const accounts = testerAccounts(encodedAccounts);
+  if (!accounts.length || !code) return null;
+  const matches = await Promise.all(accounts.map(async (account) => ({ accountId: account.accountId, matches: await secretMatches(code, account.code, signingSecret) })));
+  return matches.find((item) => item.matches)?.accountId ?? null;
 }
 
 export function cookieValue(headers: Headers, name: string) {

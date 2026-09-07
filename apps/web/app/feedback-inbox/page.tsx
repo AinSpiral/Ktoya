@@ -30,6 +30,28 @@ type Usage = {
   classBOperations: number;
   limits: { totalAudioBytes: number; classAPerMonth: number; classBPerMonth: number };
 };
+type LiveMetrics = {
+  capRub: number;
+  committedRub: number;
+  remainingRub: number;
+  reservedRub: number;
+  sessions: number;
+  successfulSessions: number;
+  userTurns: number;
+  inputAudioSeconds: number;
+  outputAudioSeconds: number;
+  providerCalls: number;
+  retries: number;
+  reconnects: number;
+  rubPerSession: number;
+  rubPerTurn: number;
+  rubPerInputMinute: number;
+  configured: boolean;
+  model: string;
+  keyId: string | null;
+  keyExpiresAt: string | null;
+  billingReadback: { rub: number; checkedAt: string | null } | null;
+};
 
 const categoryLabels: Record<Item['category'], string> = {
   idea: 'Идея',
@@ -59,6 +81,7 @@ export default function FeedbackInbox() {
   const [error, setError] = useState('');
   const [items, setItems] = useState<Item[]>([]);
   const [usage, setUsage] = useState<Usage | null>(null);
+  const [liveMetrics, setLiveMetrics] = useState<LiveMetrics | null>(null);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
@@ -70,6 +93,8 @@ export default function FeedbackInbox() {
     const body = await response.json() as { feedback: Item[]; usage: Usage };
     setItems(body.feedback);
     setUsage(body.usage);
+    const metricsResponse = await fetch('/api/friends/live/metrics', { cache: 'no-store' });
+    setLiveMetrics(metricsResponse.ok ? await metricsResponse.json() as LiveMetrics : null);
     setAuthorized(true);
   }, []);
 
@@ -138,6 +163,19 @@ export default function FeedbackInbox() {
       <progress max={usage.limits.totalAudioBytes} value={occupied} />
       <p>{warning ? 'Лимит достигнут: новое аудио заблокировано, текстовые отзывы принимаются.' : 'Старое аудио автоматически не удаляется.'}</p>
       <div className="usage-ops"><span>Class A-equivalent: {usage.classAOperations.toLocaleString('ru-RU')} / {usage.limits.classAPerMonth.toLocaleString('ru-RU')}</span><span>Class B-equivalent: {usage.classBOperations.toLocaleString('ru-RU')} / {usage.limits.classBPerMonth.toLocaleString('ru-RU')}</span></div>
+    </section>}
+    {liveMetrics && <section className={liveMetrics.remainingRub <= 0 ? 'usage-card warning' : 'usage-card'}>
+      <div><b>Yandex Speech Realtime · Closed Beta</b><strong>{liveMetrics.committedRub.toFixed(4)} ₽ / {liveMetrics.capRub.toFixed(0)} ₽</strong></div>
+      <progress max={liveMetrics.capRub} value={liveMetrics.committedRub} />
+      <p>{liveMetrics.configured ? `Модель ${liveMetrics.model}. Остаток server-side лимита: ${liveMetrics.remainingRub.toFixed(4)} ₽.` : 'Realtime отключён: защищённая конфигурация не прошла проверку.'}</p>
+      <div className="usage-ops">
+        <span>Сессии: {liveMetrics.sessions}; успешные: {liveMetrics.successfulSessions}; ходы: {liveMetrics.userTurns}</span>
+        <span>Provider calls: {liveMetrics.providerCalls}; retries: {liveMetrics.retries}; reconnects: {liveMetrics.reconnects}</span>
+        <span>Входное аудио: {liveMetrics.inputAudioSeconds.toFixed(1)} с; ответ: {liveMetrics.outputAudioSeconds.toFixed(1)} с</span>
+        <span>₽/сессию: {liveMetrics.rubPerSession.toFixed(4)}; ₽/ход: {liveMetrics.rubPerTurn.toFixed(4)}; ₽/мин входа: {liveMetrics.rubPerInputMinute.toFixed(4)}</span>
+        <span>Консервативно зарезервировано: {liveMetrics.reservedRub.toFixed(4)} ₽</span>
+        <span>{liveMetrics.billingReadback ? `Ручная сверка биллинга: ${liveMetrics.billingReadback.rub.toFixed(4)} ₽ (${liveMetrics.billingReadback.checkedAt ?? 'время не указано'})` : 'Ручная сверка биллинга ещё не зафиксирована.'}</span>
+      </div>
     </section>}
     {error && <p className="error-text" role="alert">{error}</p>}
     <section className="inbox-list" aria-label="Список отзывов">

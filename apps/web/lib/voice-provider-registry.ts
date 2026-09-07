@@ -4,6 +4,7 @@ export interface VoiceProviderCapabilities {
   transcription: { available: boolean; retrySavedAudio: boolean; message: string };
   narration: { available: boolean; reusableAudio: boolean; message: string };
   trialQaOnly?: boolean;
+  externalConsentRequired?: boolean;
   defaultNarrationVoiceId?: string;
 }
 

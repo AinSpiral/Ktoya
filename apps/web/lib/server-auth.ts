@@ -12,8 +12,14 @@ export type RequestIdentity = {
   role: FriendsRole;
   source: 'friends' | 'platform' | 'local';
   sessionId: string;
+  accountId?: string;
   csrfValid: boolean;
 };
+
+/** Stable invited-account storage namespace; legacy sessions keep their original namespace. */
+export function identityStorageOwner(identity: RequestIdentity) {
+  return identity.accountId ? `account_${identity.accountId}` : identity.sessionId;
+}
 
 export async function requestIdentity(request: Request, env: Env, allowLocalDevelopmentIdentity = false): Promise<RequestIdentity | null> {
   const hostname = new URL(request.url).hostname;
@@ -28,10 +34,11 @@ export async function requestIdentity(request: Request, env: Env, allowLocalDeve
   const session = await sessionFromRequest(request, env);
   if (session) {
     return {
-      userId: `friends:${session.sid}`,
+      userId: session.accountId ? `friends-account:${session.accountId}` : `friends:${session.sid}`,
       role: session.role,
       source: 'friends',
       sessionId: session.sid,
+      accountId: session.accountId,
       csrfValid: validCsrf(request, session),
     };
   }

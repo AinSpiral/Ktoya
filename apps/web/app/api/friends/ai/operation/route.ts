@@ -9,10 +9,10 @@ export async function POST(request: NextRequest) {
   const identity = await requestIdentity(request, env, local);
   if (!identity || identity.role !== 'tester') return NextResponse.json({ error: 'tester_session_required' }, { status: 401 });
   if (identity.source === 'friends' && !identity.csrfValid) return NextResponse.json({ error: 'csrf' }, { status: 403 });
+  const fixtureMode = friendsAIState(request.nextUrl.hostname, env as unknown as { KTOYA_SYNTHETIC_AI_FIXTURES?: string }).fixtureMode;
   return handleAIOperation(request, env, {
     userId: identity.userId,
     db: env.FRIENDS_DB,
-    forceDeterministic: true,
-    allowSyntheticFixtures: friendsAIState(request.nextUrl.hostname, env as unknown as { KTOYA_SYNTHETIC_AI_FIXTURES?:string }).fixtureMode,
+    ...(fixtureMode ? { forceDeterministic: true, allowSyntheticFixtures: true } : { liveBeta: true }),
   });
 }

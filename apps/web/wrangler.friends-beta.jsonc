@@ -26,7 +26,21 @@
   ],
   "vars": {
     "FRIENDS_BETA_MODE": "true",
-    "FRIENDS_BUILD_ID": "friends-beta-2026-09-05"
+    "FRIENDS_BUILD_ID": "closed-beta-live-voice-2026-09-07",
+    "KTOYA_LIVE_BETA_ENABLED": "true",
+    "KTOYA_LIVE_KEY_ID": "ajefn9sljo4al88nvtda",
+    "KTOYA_LIVE_FOLDER_ID": "b1gkl7lo86seu967m35j",
+    "KTOYA_LIVE_MODEL": "speech-realtime-260528",
+    "KTOYA_LIVE_KEY_EXPIRES_AT": "2026-09-13T21:00:00.000Z",
+    "KTOYA_LIVE_KEY_SCOPES": "yc.ai.foundationModels.execute",
+    "KTOYA_LIVE_IAM_VERIFIED_AT": "2026-09-07T13:13:27.060Z",
+    "KTOYA_LIVE_TARIFF_VERIFIED_AT": "2026-09-07T13:13:27.060Z",
+    "KTOYA_LIVE_BILLING_VERIFIED_AT": "2026-09-07T13:13:27.060Z",
+    "KTOYA_LIVE_INPUT_AUDIO_RUB_PER_SECOND": "0.0264",
+    "KTOYA_LIVE_OUTPUT_AUDIO_RUB_PER_SECOND": "0.0203",
+    "KTOYA_LIVE_INPUT_TEXT_RUB_PER_1K_TOKENS": "0.1",
+    "KTOYA_LIVE_OUTPUT_TEXT_RUB_PER_1K_TOKENS": "0.2",
+    "KTOYA_LIVE_CAP_RUB": "100"
   },
   "observability": { "enabled": false }
 }
