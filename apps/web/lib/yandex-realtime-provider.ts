@@ -108,6 +108,7 @@ async function runSession(input: {
   const socket = await connectYandexRealtime(input.config, input.fetcher);
   return new Promise<SessionResult>((resolve, reject) => {
     let settled = false;
+    let responseCompleted = false;
     let providerSessionId: string | undefined;
     let transcript = '';
     let text = '';
@@ -118,21 +119,30 @@ async function runSession(input: {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      socket.removeEventListener('message', onMessage);
+      socket.removeEventListener('error', onTransportFailure);
+      socket.removeEventListener('close', onTransportFailure);
       try { socket.close(1000, 'complete'); } catch { /* already closed */ }
       if (error) reject(error);
       else resolve({ text: text.trim(), transcript: transcript.trim() || undefined, audioPcm: audioChunks.length ? concatBytes(audioChunks) : undefined, providerSessionId, usage });
     };
-    const timer = setTimeout(() => finish(new YandexRealtimeError('provider_timeout', usage, providerSessionId)), SESSION_TIMEOUT_MS);
-    socket.addEventListener('message', (message) => {
+    // Response completion and input transcription are independent events. Keep
+    // the original session deadline; duplicate events must not extend it.
+    const timer = setTimeout(() => finish(new YandexRealtimeError(responseCompleted ? 'provider_empty_content' : 'provider_timeout', usage, providerSessionId)), SESSION_TIMEOUT_MS);
+    const onTransportFailure = () => finish(new YandexRealtimeError('provider_protocol', usage, providerSessionId));
+    const onMessage = (message: MessageEvent) => {
+      if (settled) return;
       try {
         if (typeof message.data !== 'string') return;
         const event = JSON.parse(message.data) as Record<string, unknown>;
         const type = String(event.type ?? '');
         if (type === 'session.created') providerSessionId = String((event.session as { id?: string } | undefined)?.id ?? '') || providerSessionId;
-        else if (type === 'conversation.item.input_audio_transcription.completed') transcript = String(event.transcript ?? transcript);
-        else if (type === 'response.output_text.delta') text += String(event.delta ?? '');
-        else if (type === 'response.output_audio_transcript.done') text = String(event.transcript ?? text);
-        else if (type === 'response.output_audio.delta') {
+        else if (type === 'conversation.item.input_audio_transcription.completed') {
+          transcript = String(event.transcript ?? transcript);
+          if (responseCompleted && transcript.trim()) finish();
+        } else if (type === 'response.output_text.delta' && !responseCompleted) text += String(event.delta ?? '');
+        else if (type === 'response.output_audio_transcript.done' && !responseCompleted) text = String(event.transcript ?? text);
+        else if (type === 'response.output_audio.delta' && !responseCompleted) {
           const chunk = decodeBase64(String(event.delta ?? ''));
           audioBytes += chunk.byteLength;
           if (audioBytes > MAX_OUTPUT_AUDIO_BYTES) {
@@ -140,26 +150,36 @@ async function runSession(input: {
             return finish(new YandexRealtimeError('provider_protocol', usage, providerSessionId));
           }
           audioChunks.push(chunk);
-        } else if (type === 'error') {
+        } else if (type === 'error' || type === 'conversation.item.input_audio_transcription.failed') {
           finish(new YandexRealtimeError('provider_protocol', usage, providerSessionId));
         } else if (type === 'response.done') {
           const response = event.response;
+          const status = (response as { status?: string } | undefined)?.status;
+          if (responseCompleted) {
+            if (status !== 'completed') finish(new YandexRealtimeError('provider_protocol', usage, providerSessionId));
+            return;
+          }
           usage = { ...usage, ...usageFromResponse(response), outputAudioMs: Math.ceil(audioBytes / OUTPUT_AUDIO_BYTES_PER_SECOND * 1000) };
           text ||= textFromResponse(response);
-          const status = (response as { status?: string } | undefined)?.status;
           if (status !== 'completed') return finish(new YandexRealtimeError('provider_protocol', usage, providerSessionId));
-          if (input.expectTranscript && !transcript.trim()) return finish(new YandexRealtimeError('provider_empty_content', usage, providerSessionId));
+          responseCompleted = true;
+          if (input.expectTranscript && !transcript.trim()) return;
           if (!input.expectTranscript && !text.trim()) return finish(new YandexRealtimeError('provider_empty_content', usage, providerSessionId));
           finish();
         }
       } catch {
         finish(new YandexRealtimeError('provider_protocol', usage, providerSessionId));
       }
-    });
-    socket.addEventListener('error', () => finish(new YandexRealtimeError('provider_protocol', usage, providerSessionId)));
-    socket.addEventListener('close', () => { if (!settled) finish(new YandexRealtimeError('provider_protocol', usage, providerSessionId)); });
-    socket.send(JSON.stringify({ type: 'session.update', session: input.session }));
-    input.send(socket);
+    };
+    socket.addEventListener('message', onMessage);
+    socket.addEventListener('error', onTransportFailure);
+    socket.addEventListener('close', onTransportFailure);
+    try {
+      socket.send(JSON.stringify({ type: 'session.update', session: input.session }));
+      input.send(socket);
+    } catch {
+      onTransportFailure();
+    }
   });
 }
 
