@@ -1,11 +1,76 @@
 # История изменений документации KTOYA
 
-Версия документа: 1.4
+Версия документа: 1.6
 Статус: действующий журнал изменений документации.
 
 ---
 
 # [Не выпущено]
+
+## 05.09.2026 — локальная художественная система Living World v2
+
+- 06.09: обязательное уточнение «живые листы»: заменены flat/rounded primary surfaces на материальные страницы, добавлена 913-byte локальная fibre texture, silhouette edges/thickness и тёплые чернила. Текст и focus не обрезаются; новые QA-проверки материала, forced colors и texture failure. Отдельно сохранён before-living-pages набор для сравнения с 9d45c2e.
+
+- Общий quiet-forest/paper/wood визуальный слой для всех авторских экранов, включая recorder, AI review, reader/composition, настройки и feedback; без изменения данных и логики.
+- Усилены физическая книга и Древо жизни; HTML обложки геометрически согласован с master. Новый time-cut asset связывает дерево, кольца и память.
+- Дополнены screenshot/QA проверки общего мира, image fallback, reload и reduced motion. Local-only; подробности и честные ограничения в [22](22-LIVING-WORLD-SYSTEM-V2.md), решение D061.
+
+## 05.09.2026 — локальный Living World art-direction candidate
+
+- Hero собран как единая реалистичная физическая сцена: деревянная книга находится в корнях старого дерева; свет, кора, мох, латунь и страницы принадлежат одному пространству.
+- Добавлены независимые desktop/mobile masters без текста, responsive AVIF/WebP pipeline, HTML-типографика обложки и procedural decode fallback.
+- Нижний landing продолжен как сдержанная последовательность страниц живой книги; family/roots секция получила отдельный original asset.
+- Локальный visual suite расширен до шести viewport и проверяет overflow, cover bounds, CTA, переход/reload, fallback, geometry reservation, reduced motion и отсутствие внешних provider-вызовов. Подробности: [21 — Living World](21-LIVING-WORLD-ART-DIRECTION.md).
+- Изменение остаётся отдельным локальным кандидатом: без push, merge, deployment, production/main и без изменений Friends Beta data/AI/STT boundaries.
+
+## 05.09.2026 — локальный Forest art direction pass
+
+- Многоплановая original SVG сцена, деревянная конструкция обложки, кремовые страницы, корешок, гравировка, детали и restrained motion; отдельная mobile-композиция и paper/forest переход к capture.
+- Исправлены responsive overflow/заголовок и узкий landing/history guard, обнаруженный целевой проверкой Back/reload.
+- Добавлен отдельный шеститестовый visual/browser suite без внешних провайдеров. Полный прежний regression cycle не повторяется автоматически.
+- Два художественных прохода; material realism/premium feel всё ещё 3/5, high-end acceptance не закрыт. [19 — оценки, assets и evidence](19-FOREST-ART-DIRECTION.md). Local-only; никакого разрешения на выпуск.
+
+## 05.09.2026 — локальный Stage B: Life Book Experience
+
+- Деревянная procedural/SVG обложка с caption внутри, слои леса и адаптивный editor; пять narrative style contracts, owner-bound голосовая инструкция без попадания в рассказ.
+- Локальный BookCompositionService: selected sources, confirmed metadata, preview/rename/reorder/apply/keep/undo; сохранение старой структуры, текстов и provenance.
+- Markdown и A5 print всей книги следуют порядку глав. Системная печать не переименована в production PDF integration.
+- Статусы и evidence: [18 — acceptance](18-PR12-AI-ACCEPTANCE-MATRIX.md#7-stage-b-product-gap-matrix--05092026). D057 фиксирует local-only release boundary; D045 manuscript направление сохранено.
+
+## 05.09.2026 — локальный Stage A: native voice QA и восстановление
+
+- Добавлен изолированный Playwright/Chromium fake-microphone контур с offline WAV, reload/playback/provenance и 105-секундной проверкой сохранённого оригинала.
+- Исправлены lifecycle recording, sticky manual transcript, ownership дополнений, startup version и AI/autosave races. Свежие свидетельства и ограничения: [18 — acceptance](18-PR12-AI-ACCEPTANCE-MATRIX.md#6-локальный-stage-a--05092026).
+- Нет push/merge, production migration, изменений IAM или новых платных вызовов.
+
+## 04.09.2026 — повторная проверка Draft PR #12 после обрыва питания
+
+### Исправлено
+- Deterministic interview больше не повторяет ту же смысловую категорию после безопасной серверной формулировки вопроса: сохранённая `category` стала частью provider context.
+- Длинный исходник не вставляется целиком в вопрос: anchor ограничен первой содержательной фразой и безопасной длиной.
+- Точный неответ `Не помню` / `Не знаю` / `Затрудняюсь ответить` сохраняется как исходный материал и provenance, но не используется как следующий anchor и не включается в читаемый текст истории.
+- Привязка созданной revision к `ai_operations` дополнительно ограничена аутентифицированным `user_id`, поэтому клиентский `operationId` не может изменить чужую audit-запись.
+- Заголовок книги правильно склоняет количество историй (`20 историй`, а не `20 истории`).
+
+### Фактическая проверка
+- 23 test files / 101 test, ESLint, TypeScript `--noEmit`, production build и `git diff --check` прошли.
+- В браузере пройдены question → non-answer → next category → assembly → Apply → rephrase → Apply → Undo → reload → exact patch → Keep → book-state; console errors/warnings отсутствуют.
+- Визуально проверены 360, 390, 768, 1024 и 1600 px. Live microphone не имитировался без синтетического virtual-mic fixture.
+- Security diff review охватил 30 executable/source-файлов; найденный owner-scope дефект исправлен и закреплён regression test, выживших reportable findings нет.
+
+## 23.08.2026 — PR #12: provider-independent AI Story Core
+
+### Добавлено
+- Динамическое интервью `ASK / READY`, сборка истории по текущим sources, preview `Сейчас / Предлагается`, явные Apply/Keep, exact-match patch и append-only Undo.
+- Заменяемые Alice AI и deterministic providers со строгими schemas, повторной server-side validation, current-story isolation и безопасной серверной формулировкой вопроса.
+- Аддитивный D1 budget ledger с reservation до provider request, отдельными `completed / failed / uncertain`, запретом автоматического повтора неопределённых платных операций и лимитами 60/100 ₽.
+- Закрытый localhost-only QA gate для новых неперсональных материалов; реальные и legacy-истории внешнему LLM не разрешены.
+- Server-side gate дополнительно требует защищённый QA user ID и loopback hostname: пользовательский AppState-флаг не может самостоятельно открыть внешний provider.
+
+### Фактическая проверка
+- На синтетических сценариях проверены полноценный, слабый и противоречивый рассказ, «не помню», длинный хаотичный текст, ранняя сборка, rephrase, patch и Undo.
+- Trial использовал 17 provider requests: 14 completed, 2 known failed и 1 uncertain; budget-accounted total 10,581802 ₽. Автоматических платных retries не было.
+- Production migration не запускалась; публичная Beta и обработка реальных личных историй этим PR не разрешены.
 
 ## 23.08.2026 — human TTS acceptance и Beta default `marina`
 

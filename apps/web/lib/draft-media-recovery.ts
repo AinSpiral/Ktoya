@@ -1,6 +1,7 @@
 import type { AppState, CaptureDraft, CaptureDraftFragment } from './domain';
 
 type MediaPresence = (key: string) => Promise<boolean>;
+type MediaKey = (userId: string, draftId: string, item: CaptureDraftFragment) => string;
 
 export function captureDraftMediaKey(userId: string, draftId: string, fragmentId: string) {
   return `${userId}/${draftId}/${fragmentId}.webm`;
@@ -11,11 +12,16 @@ export function captureDraftMediaKey(userId: string, draftId: string, fragmentId
  * reached R2.  Recover only that exact, deterministic media key: no text or
  * fragment is created, deleted, or replaced when the original is absent.
  */
-export async function recoverPendingCaptureDraftMedia(state: AppState, userId: string, hasMedia: MediaPresence): Promise<AppState> {
+export async function recoverPendingCaptureDraftMedia(
+  state: AppState,
+  userId: string,
+  hasMedia: MediaPresence,
+  mediaKey: MediaKey = (ownerId, draftId, item) => captureDraftMediaKey(ownerId, draftId, item.fragment.id),
+): Promise<AppState> {
   let changed = false;
   const recoverFragment = async (draftId: string, item: CaptureDraftFragment): Promise<CaptureDraftFragment> => {
     if (item.fragment.uploadStatus !== 'pending' || item.fragment.objectKey) return item;
-    const objectKey = captureDraftMediaKey(userId, draftId, item.fragment.id);
+    const objectKey = mediaKey(userId, draftId, item);
     if (!await hasMedia(objectKey)) return item;
     changed = true;
     return {

@@ -1,0 +1,22 @@
+{
+  "name": "ktoya-local-e2e",
+  "main": "vinext/server/app-router-entry",
+  "compatibility_date": "2026-05-15",
+  "compatibility_flags": ["nodejs_compat"],
+  "d1_databases": [
+    { "binding": "DB", "database_name": "ktoya-local-e2e", "database_id": "00000000-0000-4000-8000-000000000000" },
+    { "binding": "FRIENDS_DB", "database_name": "ktoya-friends-local-e2e", "database_id": "00000000-0000-4000-8000-000000000001" }
+  ],
+  "r2_buckets": [
+    { "binding": "STORY_MEDIA", "bucket_name": "ktoya-local-e2e-media" },
+    { "binding": "FRIENDS_AUDIO", "bucket_name": "ktoya-friends-local-e2e-audio" }
+  ],
+  "vars": {
+    "KTOYA_SYNTHETIC_AI_FIXTURES": "true",
+    "FRIENDS_BETA_MODE": "true",
+    "FRIENDS_TESTER_ACCESS_CODES": "{\"ilya\":\"e2e-friend-access\",\"friend_1\":\"e2e-friend-b-access\",\"friend_2\":\"e2e-friend-c-access\"}",
+    "OWNER_ACCESS_CODE": "e2e-owner-access",
+    "FRIENDS_SESSION_SECRET": "e2e-only-session-secret-not-for-deployment",
+    "FRIENDS_BUILD_ID": "local-e2e"
+  }
+}

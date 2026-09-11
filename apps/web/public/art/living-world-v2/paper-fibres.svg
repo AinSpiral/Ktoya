@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <!-- Non-representational UI material: deterministic fibre/grain, no scripts or external resources. -->
+  <filter id="f" x="0" y="0" width="100%" height="100%">
+    <feTurbulence type="fractalNoise" baseFrequency=".035 .72" numOctaves="2" seed="17" stitchTiles="stitch"/>
+    <feColorMatrix type="saturate" values="0"/>
+    <feComponentTransfer><feFuncA type="linear" slope=".17"/></feComponentTransfer>
+  </filter>
+  <filter id="g" x="0" y="0" width="100%" height="100%">
+    <feTurbulence type="fractalNoise" baseFrequency=".54" numOctaves="3" seed="9" stitchTiles="stitch"/>
+    <feColorMatrix type="saturate" values="0"/>
+    <feComponentTransfer><feFuncA type="linear" slope=".12"/></feComponentTransfer>
+  </filter>
+  <path d="M0 0h256v256H0z" filter="url(#f)"/>
+  <path d="M0 0h256v256H0z" filter="url(#g)"/>
+</svg>

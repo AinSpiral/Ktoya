@@ -38,3 +38,6 @@ next-env.d.ts
 /.wrangler/
 /outputs/
 /work/
+/test-results/
+/playwright-report/
+/e2e/.generated/

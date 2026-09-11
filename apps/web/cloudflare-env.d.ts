@@ -3,6 +3,31 @@ declare global {
     interface Env {
       DB: D1Database;
       STORY_MEDIA: R2Bucket;
+      FRIENDS_DB: D1Database;
+      FRIENDS_AUDIO: R2Bucket;
+      FRIENDS_BETA_MODE?: string;
+      FRIENDS_ACCESS_CODE?: string;
+      OWNER_ACCESS_CODE?: string;
+      FRIENDS_SESSION_SECRET?: string;
+      FRIENDS_BUILD_ID?: string;
+      FRIENDS_TESTER_ACCESS_CODES?: string;
+      KTOYA_LIVE_BETA_ENABLED?: string;
+      KTOYA_LIVE_API_KEY?: string;
+      KTOYA_LIVE_KEY_ID?: string;
+      KTOYA_LIVE_FOLDER_ID?: string;
+      KTOYA_LIVE_MODEL?: string;
+      KTOYA_LIVE_KEY_EXPIRES_AT?: string;
+      KTOYA_LIVE_KEY_SCOPES?: string;
+      KTOYA_LIVE_IAM_VERIFIED_AT?: string;
+      KTOYA_LIVE_TARIFF_VERIFIED_AT?: string;
+      KTOYA_LIVE_BILLING_VERIFIED_AT?: string;
+      KTOYA_LIVE_INPUT_AUDIO_RUB_PER_SECOND?: string;
+      KTOYA_LIVE_OUTPUT_AUDIO_RUB_PER_SECOND?: string;
+      KTOYA_LIVE_INPUT_TEXT_RUB_PER_1K_TOKENS?: string;
+      KTOYA_LIVE_OUTPUT_TEXT_RUB_PER_1K_TOKENS?: string;
+      KTOYA_LIVE_CAP_RUB?: string;
+      KTOYA_LIVE_BILLING_READBACK_RUB?: string;
+      KTOYA_LIVE_BILLING_READBACK_AT?: string;
       YANDEX_SPEECHKIT_API_KEY?: string;
       KTOYA_SPEECHKIT_TRIAL_ENABLED?: string;
       KTOYA_SPEECHKIT_KEY_EXPIRES_AT?: string;
@@ -13,12 +38,52 @@ declare global {
       KTOYA_SPEECHKIT_TTS_RUB_PER_UNIT?: string;
       KTOYA_SPEECHKIT_TRIAL_CAP_RUB?: string;
       KTOYA_SPEECHKIT_DEFAULT_TTS_VOICE?: string;
+      KTOYA_AI_TRIAL_ENABLED?: string;
+      KTOYA_AI_API_KEY?: string;
+      KTOYA_AI_QA_USER_ID?: string;
+      KTOYA_AI_FOLDER_ID?: string;
+      KTOYA_AI_MODEL?: string;
+      KTOYA_AI_KEY_EXPIRES_AT?: string;
+      KTOYA_AI_KEY_SCOPES?: string;
+      KTOYA_AI_IAM_VERIFIED_AT?: string;
+      KTOYA_AI_TARIFF_VERIFIED_AT?: string;
+      KTOYA_AI_BILLING_VERIFIED_AT?: string;
+      KTOYA_AI_BILLING_ACTIVE?: string;
+      KTOYA_AI_INPUT_RUB_PER_1K_TOKENS?: string;
+      KTOYA_AI_OUTPUT_RUB_PER_1K_TOKENS?: string;
+      KTOYA_AI_WORKING_CAP_RUB?: string;
+      KTOYA_AI_ABSOLUTE_CAP_RUB?: string;
     }
   }
 
   interface Env {
     DB: D1Database;
     STORY_MEDIA: R2Bucket;
+    FRIENDS_DB: D1Database;
+    FRIENDS_AUDIO: R2Bucket;
+    FRIENDS_BETA_MODE?: string;
+    FRIENDS_ACCESS_CODE?: string;
+    OWNER_ACCESS_CODE?: string;
+    FRIENDS_SESSION_SECRET?: string;
+    FRIENDS_BUILD_ID?: string;
+    FRIENDS_TESTER_ACCESS_CODES?: string;
+    KTOYA_LIVE_BETA_ENABLED?: string;
+    KTOYA_LIVE_API_KEY?: string;
+    KTOYA_LIVE_KEY_ID?: string;
+    KTOYA_LIVE_FOLDER_ID?: string;
+    KTOYA_LIVE_MODEL?: string;
+    KTOYA_LIVE_KEY_EXPIRES_AT?: string;
+    KTOYA_LIVE_KEY_SCOPES?: string;
+    KTOYA_LIVE_IAM_VERIFIED_AT?: string;
+    KTOYA_LIVE_TARIFF_VERIFIED_AT?: string;
+    KTOYA_LIVE_BILLING_VERIFIED_AT?: string;
+    KTOYA_LIVE_INPUT_AUDIO_RUB_PER_SECOND?: string;
+    KTOYA_LIVE_OUTPUT_AUDIO_RUB_PER_SECOND?: string;
+    KTOYA_LIVE_INPUT_TEXT_RUB_PER_1K_TOKENS?: string;
+    KTOYA_LIVE_OUTPUT_TEXT_RUB_PER_1K_TOKENS?: string;
+    KTOYA_LIVE_CAP_RUB?: string;
+    KTOYA_LIVE_BILLING_READBACK_RUB?: string;
+    KTOYA_LIVE_BILLING_READBACK_AT?: string;
     YANDEX_SPEECHKIT_API_KEY?: string;
     KTOYA_SPEECHKIT_TRIAL_ENABLED?: string;
     KTOYA_SPEECHKIT_KEY_EXPIRES_AT?: string;
@@ -29,6 +94,21 @@ declare global {
     KTOYA_SPEECHKIT_TTS_RUB_PER_UNIT?: string;
     KTOYA_SPEECHKIT_TRIAL_CAP_RUB?: string;
     KTOYA_SPEECHKIT_DEFAULT_TTS_VOICE?: string;
+    KTOYA_AI_TRIAL_ENABLED?: string;
+    KTOYA_AI_API_KEY?: string;
+    KTOYA_AI_QA_USER_ID?: string;
+    KTOYA_AI_FOLDER_ID?: string;
+    KTOYA_AI_MODEL?: string;
+    KTOYA_AI_KEY_EXPIRES_AT?: string;
+    KTOYA_AI_KEY_SCOPES?: string;
+    KTOYA_AI_IAM_VERIFIED_AT?: string;
+    KTOYA_AI_TARIFF_VERIFIED_AT?: string;
+    KTOYA_AI_BILLING_VERIFIED_AT?: string;
+    KTOYA_AI_BILLING_ACTIVE?: string;
+    KTOYA_AI_INPUT_RUB_PER_1K_TOKENS?: string;
+    KTOYA_AI_OUTPUT_RUB_PER_1K_TOKENS?: string;
+    KTOYA_AI_WORKING_CAP_RUB?: string;
+    KTOYA_AI_ABSOLUTE_CAP_RUB?: string;
   }
 }
 

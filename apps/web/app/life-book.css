@@ -1,0 +1,65 @@
+/* Warm wood, quiet forest and paper. Decoration never carries navigation. */
+.landing { overflow-x: visible; background: radial-gradient(ellipse at 75% 16%, #e8e4ca 0, transparent 36%), linear-gradient(115deg, #fbf7ed, #eee5d1); }
+.hero { gap: 4vw; grid-template-columns: minmax(0,1fr) minmax(0,1fr); }
+.hero h1 { font-size: clamp(58px, 6.2vw, 90px); line-height: .98; }
+.hero-lead { max-width: 540px; }
+.book-scene { min-height: 600px; isolation: isolate; padding: 38px 20px 52px; }
+.forest-scene { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -2; border-radius: 48% 48% 14% 14%; }
+.book-rest { position: absolute; bottom: 27px; width: 84%; height: 44px; border-radius: 50%; background: #324d30; opacity: .22; filter: blur(16px); z-index: -1; }
+.book-cover { display: flex; flex-direction: column; align-items: center; width: min(340px, 100% - 16px); min-height: 478px; aspect-ratio: auto; padding: 28px 30px 25px 37px; color: #fff0c8; border: 2px solid #77502b; border-radius: 5px 13px 13px 5px; transform: none; background: repeating-linear-gradient(93deg, #492b1310 0 2px, transparent 3px 11px), repeating-linear-gradient(87deg, transparent 0 22px, #e5b97e12 24px 26px, transparent 29px 43px), radial-gradient(ellipse at 65% 25%, #a27442, #77502d 55%, #4d321e); box-shadow: inset 4px 0 5px #e2b06c55, inset -3px 0 8px #2f1c1255, 8px 3px 0 #ebe0c3, 11px 5px 0 #c6b897, 15px 8px 0 #714b2b, 21px 22px 34px #24332655; }
+.book-cover::before { inset: 13px 12px 13px 22px; width: auto; border: 1px solid #e0bd7b99; background: none; border-radius: 2px 7px 7px 2px; pointer-events: none; }
+.book-cover::after { content: ''; position: absolute; inset: 0 auto 0 5px; width: 9px; background: linear-gradient(90deg, #21160d66, #c5904b44, #21160d55); pointer-events: none; }
+.book-cover-top { width: 100%; color: #fff0c8; font-size: 10px; letter-spacing: .14em; }
+.cover-tree { flex: 0 0 auto; width: 134px; height: 134px; margin: 20px 0 2px; color: #e9c98b; filter: drop-shadow(0 1px 1px #241509); }
+.book-title { margin: 0; text-align: center; font-size: 36px; line-height: 1.07; color: #fff1cf; text-shadow: 0 2px 2px #39200e; letter-spacing: -.02em; }
+.cover-byline { margin: 19px 0 16px; font-size: 11px; letter-spacing: .04em; color: #fff0ce; text-align: center; }
+.book-cover .book-caption { position: static; margin: auto 0 0; padding: 14px 0 0; border: 0; border-top: 1px solid #dec18b88; background: none; color: #fff1d3; opacity: 1; font: 400 14px/1.5 var(--font-serif), Georgia, serif; text-align: center; width: 100%; }
+.book-ribbon { position: absolute; right: 40px; bottom: -28px; width: 20px; height: 27px; background: linear-gradient(90deg,#214538,#47765b,#214538); clip-path: polygon(0 0,100% 0,100% 100%,50% 78%,0 100%); }
+.app-shell, .workspace-main { background: radial-gradient(ellipse at 100% 0, #c4d0b633, transparent 40%), #f6f0e4; }
+.paper-page, .reader-page { background: repeating-linear-gradient(0deg, #a9966b05 0 1px, transparent 1px 5px), #fffdf5; }
+.workspace-sidebar { border-right: 5px solid #977248; background: radial-gradient(ellipse at 0 95%,#385442,#183f35 55%); }
+.record-button { min-height: 56px; box-shadow: 0 5px 14px #24493722; }
+.record-button.active { background: #833c2f; }
+.char-note, .fragment-card > div { flex-wrap: wrap; }
+.story-textarea, .answer-textarea { scroll-margin-top: 24px; }
+.book-intro, .book-shelf, .ai-tools { min-width: 0; }
+.style-select { display: grid; gap: 9px; margin-top: 20px; font-weight: 650; }
+.style-select select, .composition-panel select, .composition-panel input[type=text] { width: 100%; min-height: 48px; padding: 10px 12px; border: 1px solid #8e9c8f; border-radius: 9px; background: #fffcf2; color: #17352d; font: inherit; }
+.composition-panel { margin-top: 36px; padding: clamp(18px,3vw,32px); border: 1px solid #b0b8a1; border-radius: 18px; background: #fcf9ed; }
+.book-structure-wrap { width: min(100% - 32px,1180px); margin: -35px auto 80px; }
+.print-book { display: none; }
+.composition-panel h2 { margin: 0 0 14px; font: 600 32px/1.1 var(--font-serif),Georgia,serif; }
+.composition-panel label { display: flex; gap: 12px; align-items: center; min-height: 44px; padding: 7px 0; }
+.composition-panel label input[type=checkbox] { width: 20px; height: 20px; flex-shrink: 0; }
+.composition-panel p, .composition-panel li { line-height: 1.6; }
+.composition-panel .chapter-plan { padding: 16px; border: 1px solid var(--line); border-radius: 12px; margin: 14px 0; }
+.composition-panel .chapter-plan button { min-height: 44px; margin: 7px 10px 0 0; }
+select:focus-visible { outline: 3px solid #d68135; outline-offset: 4px; }
+@media (max-width: 1024px) { .hero { gap: 32px; } .book-scene { padding-inline: 14px; } }
+@media (max-width: 900px) { .hero { grid-template-columns: minmax(0,1fr); } .book-scene { width: min(100%,520px); margin-inline: auto; } }
+@media (max-width: 600px) {
+  .hero h1 { font-size: clamp(49px,14vw,70px); }
+  .book-scene { min-height: 530px; padding: 30px 18px 45px; }
+  .book-cover { min-height: 443px; width: min(296px,100% - 16px); padding: 24px 22px 25px 30px; }
+  .book-title { font-size: 31px; }
+  .cover-tree { width: 115px; height: 115px; margin-top: 18px; }
+  .book-cover-top { font-size: 9px; }
+  .book-cover .book-caption { font-size: 13px; }
+  .mobile-section-nav { flex-wrap: wrap; overflow-x: visible; }
+  .flow-actions { gap: 12px; }
+}
+@media print {
+  @page { size: A5; margin: 18mm 15mm; @bottom-center { content: counter(page); font: 9pt Georgia,serif; color: #586459; } }
+  .workspace-main { background: white !important; }
+  .workspace-main > :not(.print-book), .workspace > aside, .mobile-dock { display: none !important; }
+  .print-book { display: block; color: #182b23; font: 12pt/1.6 Georgia,serif; }
+  .print-book > header { text-align: center; padding: 32mm 7mm 22mm; border: 1px solid #aa9368; break-after: page; }
+  .print-book h1 { font-size: 32pt; }
+  .print-book h2 { font-size: 24pt; break-after: avoid; }
+  .print-book h3 { font-size: 20pt; break-after: avoid; }
+  .print-book article, .print-book > section { break-before: page; }
+  .print-book article:first-of-type { break-before: auto; }
+  .print-book h3 { margin-top: 12mm; }
+  .print-book p { margin: 0 0 1em; }
+  .print-book p { orphans: 3; widows: 3; overflow-wrap: anywhere; }
+}

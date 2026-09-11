@@ -1,0 +1,34 @@
+/* Original photographic foundation; procedural scene remains an independent load fallback. */
+.hybrid-forest { position:absolute; inset:0; z-index:-2; overflow:hidden; pointer-events:none; opacity:0; }
+.hybrid-forest[data-ready="true"] { opacity:1; }
+.hybrid-forest picture { position:absolute; inset:-3px; transform:translate(calc(var(--forest-x) * .25),calc(var(--forest-y) * .25)); }
+.hybrid-forest img { width:100%; height:100%; object-fit:cover; object-position:70% 50%; }
+.forest-masthead:has(.hybrid-forest[data-ready="true"]) .forest-world { background:transparent; }
+.forest-masthead:has(.hybrid-forest[data-ready="true"]) .forest-far,
+.forest-masthead:has(.hybrid-forest[data-ready="true"]) .forest-middle { visibility:hidden; }
+.forest-masthead:has(.hybrid-forest[data-ready="true"]) .forest-near { opacity:.12; }
+.forest-masthead:has(.hybrid-forest[data-ready="true"]) .forest-copy-shade { background:linear-gradient(90deg,#0b201bd9 0%,#10201994 30%,#15251922 60%,transparent 85%),linear-gradient(0deg,#132017a6,transparent 22%); }
+.hybrid-book-slot { --book-scale:.44; position:relative; width:100%; height:674px; pointer-events:none; }
+.hybrid-book-scene { height:100%; }
+.hybrid-book-scene[hidden] { display:grid; position:absolute; inset:0; visibility:hidden; }
+.raster-book-object { width:calc(1122px * var(--book-scale)); height:calc(1402px * var(--book-scale)); position:relative; transform:translate(calc(var(--forest-x) * .45),calc(var(--forest-y) * .45)); }
+.book-master-plane { position:absolute; top:0; left:0; width:1122px; height:1402px; transform:scale(var(--book-scale)); transform-origin:top left; }
+.book-master-plane img { display:block; width:1122px; height:1402px; }
+.book-scene .book-cover.hybrid-cover-plane { inset:0 auto auto 0; width:700px; height:1120px; padding:96px; transform-origin:0 0; background:transparent; border:0; border-radius:0; box-shadow:none; display:flex; flex-direction:column; align-items:center; color:#eee0bd; font-family:var(--font-serif),Georgia,serif; }
+.hybrid-engraved-brand { font-size:109px; font-weight:600; line-height:1.2; letter-spacing:-.04em; text-shadow:0 2px 1px #2a1c15; }
+.hybrid-cover-label { margin-top:15px; font-size:24px; text-transform:uppercase; letter-spacing:.2em; }
+.book-cover .hybrid-cover-title { position:relative; inset:auto; margin:auto 0; text-align:center; font-size:84px; line-height:1.25; opacity:1; text-shadow:0 1px 1px #2a1c15; }
+.book-scene .book-cover.hybrid-cover-plane .book-caption { width:100%; margin:0; padding:28px 0 0; font-size:44px; line-height:1.4; border-top:1px solid #d7c59a77; color:#f4e7cc; }
+.hybrid-contact { position:absolute; bottom:51px; left:24%; width:65%; height:27px; border-radius:50%; background:radial-gradient(ellipse,#0a100bcc 0%,#10150a55 45%,transparent 72%); transform:rotate(4deg); }
+@media (min-width:901px) and (max-width:1199px) { .hybrid-book-slot { --book-scale:.33; height:565px; }.hybrid-contact { bottom:76px; } }
+@media (max-width:900px) {
+  .hybrid-book-slot { --book-scale:.35; grid-row:4; height:525px; }
+  .hybrid-forest picture { bottom:-18%; }
+  .hybrid-forest img { object-position:50% 60%; }
+  .forest-masthead:has(.hybrid-forest[data-ready="true"]) .forest-copy-shade { background:linear-gradient(180deg,#102018db 0%,#10201899 30%,transparent 57%,#10201833 76%,#102018cc 100%); }
+  .forest-masthead:has(.hybrid-forest[data-ready="true"]) .forest-near { display:none; }
+  .hybrid-contact { bottom:40px; left:20%; width:66%; }
+}
+@media (max-width:600px) { .hybrid-book-slot { --book-scale:.25; height:371px; }.hybrid-contact { bottom:34px; height:19px; } }
+@media (max-width:370px) { .hybrid-book-slot { --book-scale:.235; height:355px; } }
+@media (prefers-reduced-motion:reduce) { .hybrid-forest picture,.raster-book-object { transform:none; } }
